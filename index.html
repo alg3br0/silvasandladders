@@ -60,6 +60,9 @@ button:focus-visible,input:focus-visible{outline:4px dashed var(--ink);outline-o
 .chip .sq{color:var(--muted)}
 .chip.now{background:var(--orange-l)}
 .chip.now .sq{color:var(--ink)}
+.chip.out{opacity:.5;background:var(--panel-2)}
+.chip.out .nm{text-decoration:line-through}
+.chip.low .sq{color:var(--bad)}
 .tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .timer{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;background:var(--lcd);border:4px solid var(--ink);box-shadow:4px 4px 0 var(--ink)}
 .timer .lbl{font-family:var(--display);font-size:9px;color:var(--white)}
@@ -280,7 +283,7 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
     </div>
     <div class="tools">
       <div class="timer" id="timer" hidden>
-        <span class="lbl">TIME</span>
+        <span class="lbl">TEAM<br>TIME</span>
         <span class="t" id="timerText">4:00</span>
         <button class="icon-btn" id="pauseBtn" type="button" aria-label="Pause timer"></button>
       </div>
@@ -323,11 +326,11 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
         </form>
         <div><button class="btn orange" type="button" id="addBtn">+ Add team</button></div>
         <div class="opt-row">
-          <span class="eyebrow">TIME PER TEAM</span>
-          <div class="seg" id="timeSeg" role="group" aria-label="Time per team">
+          <span class="eyebrow">CLOCK PER TEAM</span>
+          <div class="seg" id="timeSeg" role="group" aria-label="Clock per team">
+            <button type="button" data-t="30">30 SEC</button>
             <button type="button" data-t="45">45 SEC</button>
-            <button type="button" data-t="60">1 MIN</button>
-            <button type="button" data-t="75">75 SEC</button>
+            <button type="button" data-t="60">60 SEC</button>
             <button type="button" data-t="0">OFF</button>
           </div>
           <span class="time-hint" id="timeHint"></span>
@@ -336,7 +339,8 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
           <li>Read the question out loud. The team has <b>15 seconds</b> to pick <b>A, B, C or D</b>, and you click their answer. Out of time = incorrect.</li>
           <li><b>Correct</b> → roll two dice and move. <b>Incorrect</b> → no roll, next team.</li>
           <li>Land on a <b>ladder</b> → climb up. Land on a <b>Silva</b> → ride his BG slide down.</li>
-          <li>First team to <b>28</b> wins. The game clock is the time per team × the number of teams. If it runs out, the team furthest ahead wins.</li>
+          <li>Every team has its <b>own clock</b>. It only runs while that team's question is up, so answer fast! A team that runs out of time is <b>out</b>.</li>
+          <li>First team to <b>28</b> wins. If every team runs out of time, the team furthest ahead wins.</li>
         </ol>
         <div class="start-row">
           <button class="btn blue big" type="button" id="startBtn">▶ Start game</button>
@@ -350,7 +354,6 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
           <span class="who" id="turnName"></span>
           <span class="where" id="turnWhere"></span>
         </div>
-        <div class="timeup-note" id="timeupNote" hidden>TIME'S UP! FINISH THIS TURN, THEN PRESS NEXT.</div>
         <div class="pcard qcard">
           <div class="qhead">
             <p class="eyebrow" id="qTag"></p>
@@ -719,7 +722,7 @@ function drawBoard(){
 
 /* ================= state ================= */
 function freshState(){ return { phase:"setup", teams:[], order:[], turn:0, deck:[], qi:null, opts:[], picked:null,
-  perTeam:60, timeLimit:0, timeLeft:0, running:false, paused:false, timeUp:false, qLeft:15, timedOut:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
+  perTeam:30, paused:false, qLeft:15, timedOut:false, outNow:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
 let S = freshState();
 let busy = false;
 
@@ -769,8 +772,10 @@ function render(){
 function renderChips(){
   const box=$("#orderChips"); box.textContent="";
   if(S.phase==="setup") return;
-  S.order.forEach((id,i)=>{ const t=team(id); const li=el("li","chip"+(i===S.turn && S.phase!=="over"?" now":"")); li.style.setProperty("--c",t.color);
-    li.appendChild(el("span","sw")); li.appendChild(el("span","",t.name)); li.appendChild(el("span","sq",t.pos)); box.appendChild(li); });
+  S.order.forEach((id,i)=>{ const t=team(id);
+    const li=el("li","chip"+(i===S.turn && S.phase!=="over"?" now":"")+(t.out?" out":"")+(S.perTeam && !t.out && t.time<=10?" low":"")); li.style.setProperty("--c",t.color);
+    li.appendChild(el("span","sw")); li.appendChild(el("span","nm",t.name));
+    li.appendChild(el("span","sq", S.perTeam ? `${t.pos} · ${t.out ? "OUT" : fmt(t.time)}` : String(t.pos))); box.appendChild(li); });
 }
 function renderSetup(){
   const list=$("#teamList"); list.textContent="";
@@ -783,8 +788,7 @@ function renderSetup(){
   });
   $("#addBtn").disabled = S.teams.length>=COLORS.length;
   document.querySelectorAll("#timeSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.t===S.perTeam)));
-  const n=Math.max(2,S.teams.length);
-  $("#timeHint").textContent = S.perTeam ? `${n} TEAMS × ${fmt(S.perTeam)} = ${fmt(S.perTeam*n)} GAME` : "NO GAME CLOCK";
+  $("#timeHint").textContent = S.perTeam ? `EACH TEAM GETS ${fmt(S.perTeam)} OF ANSWER TIME` : "NO TEAM CLOCKS";
   const ok=S.teams.length>=2; $("#startBtn").disabled=!ok;
   $("#startHint").textContent = ok ? `${S.teams.length} TEAMS READY` : `ADD ${2-S.teams.length} MORE TEAM${S.teams.length===1?"":"S"}`;
 }
@@ -795,7 +799,6 @@ function renderPlay(){
   $("#turnBar").style.setProperty("--c",t.color);
   $("#turnName").textContent=t.name.toUpperCase()+"'S TURN";
   $("#turnWhere").textContent = t.pos===1 ? "ON START" : "SQUARE "+t.pos;
-  $("#timeupNote").hidden = !S.timeUp || S.phase==="over";
   const q=QUESTIONS[S.qi];
   if(q){
     $("#qTag").textContent=`MODULE ${q.m} · QUESTION ${S.qCount}`;
@@ -812,8 +815,8 @@ function renderPlay(){
   const v=$("#verdict"); v.textContent="";
   if(S.picked===null){ v.hidden=true; }
   else { v.hidden=false; const ok=S.opts[S.picked]===q.a; v.className="verdict "+(ok?"good":"bad");
-    v.appendChild(el("span","stamp",ok?"CORRECT!":S.timedOut?"TIME'S UP!":"INCORRECT!"));
-    v.appendChild(el("span","more", ok ? (S.rolled ? "Nice!" : "Roll the dice.") : "No roll this turn. Answer: "+q.a)); }
+    v.appendChild(el("span","stamp",ok?"CORRECT!":S.outNow?"OUT OF TIME!":S.timedOut?"TIME'S UP!":"INCORRECT!"));
+    v.appendChild(el("span","more", ok ? (S.rolled ? "Nice!" : "Roll the dice.") : (S.outNow ? t.name+" is out of the game. Answer: " : "No roll this turn. Answer: ")+q.a)); }
   renderQTimer();
   setDie(0,S.dice[0]); setDie(1,S.dice[1]);
   $("#sum").textContent = S.rolled ? "="+(S.dice[0]+S.dice[1]) : "";
@@ -822,14 +825,14 @@ function renderPlay(){
   if(S.phase==="question"){ btn.textContent="Pick their answer"; btn.disabled=true; }
   else if(S.phase==="correct"){ btn.textContent="Roll the dice!"; btn.classList.add("orange"); }
   else if(S.phase==="rolling"||S.phase==="moving"){ btn.textContent="Moving…"; btn.disabled=true; }
-  else if(S.phase==="wrong"||S.phase==="moved"){ btn.textContent = S.timeUp ? "See the winner ▶" : "Next team ▶"; btn.classList.add("blue"); }
+  else if(S.phase==="wrong"||S.phase==="moved"){ btn.textContent = S.teams.some(z=>!z.out) ? "Next team ▶" : "See the winner ▶"; btn.classList.add("blue"); }
   else btn.hidden=true;
 }
 function renderOrder(){
   const ol=$("#orderList"); ol.textContent="";
   S.order.forEach((id,i)=>{ const t=team(id); const li=el("li"); li.style.setProperty("--c",t.color); li.style.animationDelay=(i*.2)+"s";
     li.appendChild(el("span","n",String(i+1))); li.appendChild(el("span","sw")); li.appendChild(el("span","nm",t.name)); ol.appendChild(li); });
-  $("#beginBtn").textContent = S.timeLimit ? `▶ Begin · ${fmt(S.timeLimit)} on the clock` : "▶ Begin";
+  $("#beginBtn").textContent = S.perTeam ? `▶ Begin · ${fmt(S.perTeam)} per team` : "▶ Begin";
 }
 function renderWin(){
   const winners=S.winners.map(team);
@@ -843,9 +846,9 @@ function renderWin(){
 function renderTimer(){
   const box=$("#timer"); const show = S.phase!=="setup";
   box.hidden=!show; if(!show) return;
-  $("#timerText").textContent = !S.timeLimit ? "--:--" : S.timeUp ? "0:00" : fmt(S.timeLeft);
-  box.classList.toggle("up", S.timeUp && S.phase!=="over");
-  box.classList.toggle("low", !!S.timeLimit && !S.timeUp && S.timeLeft<=30);
+  const t=cur();
+  $("#timerText").textContent = !S.perTeam || !t || S.phase==="over" ? "--:--" : t.out ? "OUT" : fmt(t.time);
+  box.classList.toggle("low", !!S.perTeam && !!t && S.phase!=="over" && t.time<=10);
   box.classList.toggle("paused", S.paused && S.phase!=="over");
   const p=$("#pauseBtn"); p.hidden = S.phase==="over" || S.phase==="order";
   p.innerHTML = !S.paused
@@ -878,21 +881,27 @@ function addTeam(name){
 }
 function startGame(){
   if(S.teams.length<2) return; sfx.unlock(); music.stop();
-  S.order=shuffle(S.teams.map(t=>t.id)); S.teams.forEach(t=>t.pos=1);
+  S.order=shuffle(S.teams.map(t=>t.id)); S.teams.forEach(t=>{ t.pos=1; t.time=S.perTeam; t.out=false; });
   S.turn=0; S.deck=shuffle(QUESTIONS.map((_,i)=>i)); S.qCount=0;
-  S.timeLimit=S.perTeam*S.teams.length; S.timeLeft=S.timeLimit; S.timeUp=false; S.running=false; S.paused=false; S.winners=[]; S.qi=null; S.picked=null; S.rolled=false;
+  S.paused=false; S.winners=[]; S.qi=null; S.picked=null; S.rolled=false;
   S.phase="order"; render(); $("#beginBtn").focus();
 }
-function begin(){ if(S.phase!=="order") return; S.running=S.timeLimit>0; lastTick=performance.now(); newTurn(); }
+function begin(){ if(S.phase!=="order") return; lastTick=performance.now(); newTurn(); }
 function newTurn(){
   if(!S.deck.length) S.deck=shuffle(QUESTIONS.map((_,i)=>i));
-  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.qCount++; S.qLeft=Q_TIME; S.timedOut=false;
+  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.qCount++; S.qLeft=Q_TIME; S.timedOut=false; S.outNow=false;
   S.phase="question"; render();
 }
 function answer(i){
   if(S.phase!=="question") return;
   S.picked=i; const ok=S.opts[i]===QUESTIONS[S.qi].a;
   S.phase = ok ? "correct" : "wrong"; ok ? sfx.correct() : sfx.wrong(); render();
+  $("#actionBtn").focus({preventScroll:true});
+}
+function teamOut(t){
+  t.out=true; t.time=0; S.outNow=true; S.timedOut=true;
+  if(S.phase==="question") S.picked=-1;
+  S.phase="wrong"; sfx.buzzer(); render();
   $("#actionBtn").focus({preventScroll:true});
 }
 function timeOut(){
@@ -947,11 +956,12 @@ async function popEvent(kind,title,sub){
 }
 function next(){
   if(!(S.phase==="wrong"||S.phase==="moved") || busy) return;
-  if(S.timeUp) return endByPosition("Time's up! Furthest team wins");
-  S.turn=(S.turn+1)%S.order.length; newTurn();
+  const n=S.order.length;
+  for(let i=1;i<=n;i++){ const idx=(S.turn+i)%n; if(!team(S.order[idx]).out){ S.turn=idx; return newTurn(); } }
+  endByPosition("Everyone ran out of time. Furthest team wins");
 }
 function endByPosition(reason){ const max=Math.max(...S.teams.map(t=>t.pos)); win(S.teams.filter(t=>t.pos===max).map(t=>t.id), reason); }
-function win(ids, reason){ S.winners=ids; S.winBy=reason; S.running=false; S.phase="over"; render(); confetti(); music.play();
+function win(ids, reason){ S.winners=ids; S.winBy=reason; S.phase="over"; render(); confetti(); music.play();
   clearTimeout(win.stampTimer); win.stampTimer=setTimeout(()=>{ if(S.phase==="over") sfx.stamp(); }, reduced()?0:2300); }
 
 /* ================= timer ================= */
@@ -959,10 +969,11 @@ let lastTick=performance.now();
 setInterval(()=>{
   const now=performance.now(); const dt=(now-lastTick)/1000; lastTick=now;
   if(S.paused || S.phase==="setup" || S.phase==="order" || S.phase==="over") return;
-  if(S.running){
-    S.timeLeft=Math.max(0,S.timeLeft-dt);
-    if(S.timeLeft<=0 && !S.timeUp){ S.timeUp=true; S.running=false; sfx.buzzer(); render(); }
-    else renderTimer();
+  const ct=cur();
+  if(S.perTeam && ct && !ct.out && S.phase==="question"){
+    ct.time=Math.max(0,ct.time-dt);
+    if(ct.time<=0){ teamOut(ct); return; }
+    renderTimer(); renderChips();
   }
   if(S.phase==="question"){
     const before=Math.ceil(S.qLeft); S.qLeft=Math.max(0,S.qLeft-dt); const after=Math.ceil(S.qLeft);
@@ -1009,7 +1020,7 @@ function wire(){
     b.classList.add("armed"); b.textContent="Click again to end"; armTimer=setTimeout(()=>{ b.classList.remove("armed"); b.textContent="End game"; },3000); };
   $("#rematchBtn").onclick=startGame;
   $("#musicBtn").onclick=()=>music.toggle();
-  $("#changeBtn").onclick=()=>{ music.stop(); S.phase="setup"; S.teams.forEach(t=>t.pos=1); S.running=false; render(); };
+  $("#changeBtn").onclick=()=>{ music.stop(); S.phase="setup"; S.teams.forEach(t=>t.pos=1); render(); };
   document.addEventListener("keydown",(e)=>{
     if(e.target.closest && e.target.closest("input,textarea,select")) return;
     if(e.metaKey||e.ctrlKey||e.altKey) return;
@@ -1026,7 +1037,7 @@ function wire(){
 
 /* ================= boot (keeps a running game through live updates) ================= */
 function boot(data){
-  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); if(![45,60,75,0].includes(S.perTeam)) S.perTeam=60; }
+  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); if(![30,45,60,0].includes(S.perTeam)) S.perTeam=30; S.teams.forEach(t=>{ if(typeof t.time!=="number") t.time=S.perTeam; }); }
   drawSky(); drawBoard(); wire(); renderMute(); render();
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>placeTokens());
 }

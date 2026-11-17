@@ -184,6 +184,22 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
 .dice{display:flex;align-items:center;gap:12px}
 .die{width:54px;height:54px;border:4px solid var(--ink);background:var(--white);box-shadow:inset -4px -4px 0 rgba(0,0,0,.15),4px 4px 0 var(--ink);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:6px;box-sizing:border-box;gap:3px}
 .die span.on{background:var(--ink)}
+.dice-stage{position:absolute;inset:0;z-index:7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.6cqw;background:var(--scrim)}
+.big-dice{display:flex;gap:5cqw}
+.die.big{width:15cqw;height:15cqw;border-width:.8cqw;padding:1.8cqw;gap:.7cqw;box-shadow:inset -.8cqw -.8cqw 0 rgba(0,0,0,.15),1cqw 1cqw 0 var(--ink)}
+.dice-stage.rolling .die.big{animation:bigTumble .5s steps(8) infinite}
+.dice-stage.rolling .die.big:nth-child(2){animation-duration:.62s;animation-direction:reverse}
+.dice-stage.landed .die.big{animation:land .35s steps(4)}
+.roll-eq{margin:0;font-family:var(--display);font-size:3cqw;color:var(--white);text-shadow:.35cqw .35cqw 0 var(--ink)}
+.roll-num{margin:0;font-family:var(--display);font-size:19cqw;line-height:1;color:transparent;
+  background:linear-gradient(90deg,#FF1F4B,#FF8A00,#FFE600,#00F06A,#00C8FF,#7A5CFF,#FF2BD6,#FF1F4B);background-size:200% 100%;-webkit-background-clip:text;background-clip:text;
+  filter:drop-shadow(.5cqw 0 0 var(--ink)) drop-shadow(-.5cqw 0 0 var(--ink)) drop-shadow(0 .5cqw 0 var(--ink)) drop-shadow(0 -.5cqw 0 var(--ink)) drop-shadow(.9cqw .9cqw 0 var(--ink));
+  animation:rgbShift .9s linear infinite,numPop .5s cubic-bezier(.2,1.8,.4,1) both,numPulse .45s ease-in-out .5s infinite alternate}
+@keyframes bigTumble{0%{transform:translateY(0) rotate(0)}25%{transform:translateY(-5cqw) rotate(90deg)}50%{transform:translateY(0) rotate(180deg)}75%{transform:translateY(-2.5cqw) rotate(270deg)}100%{transform:translateY(0) rotate(360deg)}}
+@keyframes land{0%{transform:translateY(-3cqw)}60%{transform:translateY(.6cqw)}100%{transform:translateY(0)}}
+@keyframes rgbShift{to{background-position:200% 0}}
+@keyframes numPop{from{transform:scale(.15) rotate(-25deg)}}
+@keyframes numPulse{to{transform:scale(1.08) rotate(3deg)}}
 .dice.rolling .die{animation:tumble .24s steps(4) infinite}
 .dice.rolling .die:nth-child(2){animation-direction:reverse}
 .sum{font-family:var(--display);font-size:22px;min-width:3ch;color:var(--white);text-shadow:-2px 0 0 var(--ink),2px 0 0 var(--ink),0 -2px 0 var(--ink),0 2px 0 var(--ink),3px 3px 0 var(--ink)}
@@ -301,6 +317,11 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
       <canvas id="boardCanvas" role="img" aria-label="Game board, squares 1 to 28, with ladders and Silva slides"></canvas>
       <svg id="boardLabels" aria-hidden="true"></svg>
       <div id="tokens"></div>
+      <div class="dice-stage" id="diceStage" hidden aria-live="polite">
+        <div class="big-dice"><div class="die big" id="bd0"></div><div class="die big" id="bd1"></div></div>
+        <p class="roll-eq" id="rollEq" hidden></p>
+        <p class="roll-num" id="rollNum" hidden></p>
+      </div>
       <div class="event" id="eventPop" hidden>
         <img id="eventImg" alt="">
         <div><p class="event-title" id="eventTitle"></p><p class="event-sub" id="eventSub"></p></div>
@@ -326,8 +347,8 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
         </form>
         <div><button class="btn orange" type="button" id="addBtn">+ Add team</button></div>
         <div class="opt-row">
-          <span class="eyebrow">GAME LENGTH</span>
-          <div class="seg" id="timeSeg" role="group" aria-label="Total game length">
+          <span class="eyebrow">TIME PER TEAM</span>
+          <div class="seg" id="timeSeg" role="group" aria-label="Time on each team's clock">
             <button type="button" data-t="150">2.5 MIN</button>
             <button type="button" data-t="180">3 MIN</button>
             <button type="button" data-t="210">3.5 MIN</button>
@@ -340,7 +361,7 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
           <li>Read the question out loud. The team has <b>15 seconds</b> to pick <b>A, B, C or D</b>, and you click their answer. Out of time = incorrect.</li>
           <li><b>Correct</b> → roll two dice and move. <b>Incorrect</b> → no roll, next team.</li>
           <li>Land on a <b>ladder</b> → climb up. Land on a <b>Silva</b> → ride his BG slide down.</li>
-          <li>The game length is split evenly into each team's <b>own clock</b>. It only runs during that team's turn, so answer fast! A team that runs out of time is <b>out</b>.</li>
+          <li>Every team has its <b>own clock</b> (3.5 minutes each). It only runs during that team's turn, so answer fast! A team that runs out of time is <b>out</b>.</li>
           <li>First team to <b>28</b> wins. If every team runs out of time, the team furthest ahead wins.</li>
         </ol>
         <div class="start-row">
@@ -576,6 +597,7 @@ const sfx = (() => {
     buzzer(){ tone(130,.7,{vol:.07}); },
     stamp(){ tone(110,.14,{vol:.14}); tone(70,.2,{vol:.12,at:.02}); },
     tick2(){ tone(1320,.07,{vol:.05}); },
+    reveal(){ [784,988,1319].forEach((f,i)=>tone(f,.12,{at:i*.06,vol:.07})); tone(1568,.4,{at:.2,vol:.06,type:"triangle"}); },
     ctx(){ return ac(); },
     toggle(){ muted=!muted; try{ localStorage.setItem("silvas-muted",muted?"1":"0"); }catch(e){} if(!muted) ac(); return muted; },
     isMuted(){ return muted; }
@@ -723,7 +745,7 @@ function drawBoard(){
 
 /* ================= state ================= */
 function freshState(){ return { phase:"setup", teams:[], order:[], turn:0, deck:[], qi:null, opts:[], picked:null,
-  total:180, perTeam:0, pendingOut:false, paused:false, qLeft:15, timedOut:false, outNow:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
+  clock:210, perTeam:0, pendingOut:false, paused:false, qLeft:15, timedOut:false, outNow:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
 let S = freshState();
 let busy = false;
 
@@ -788,14 +810,14 @@ function renderSetup(){
     li.appendChild(x); list.appendChild(li);
   });
   $("#addBtn").disabled = S.teams.length>=COLORS.length;
-  document.querySelectorAll("#timeSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.t===S.total)));
-  const n=Math.max(2,S.teams.length);
-  $("#timeHint").textContent = S.total ? `${fmt(S.total)} TOTAL ÷ ${n} TEAMS = ${fmt(Math.round(S.total/n))} EACH` : "NO TEAM CLOCKS";
+  document.querySelectorAll("#timeSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.t===S.clock)));
+  $("#timeHint").textContent = S.clock ? `EVERY TEAM GETS ${fmt(S.clock)} ON ITS OWN CLOCK` : "NO TEAM CLOCKS";
   const ok=S.teams.length>=2; $("#startBtn").disabled=!ok;
   $("#startHint").textContent = ok ? `${S.teams.length} TEAMS READY` : `ADD ${2-S.teams.length} MORE TEAM${S.teams.length===1?"":"S"}`;
 }
 const FACES={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
-function setDie(i,v){ const d=$("#die"+i); if(!d.children.length) for(let k=0;k<9;k++) d.appendChild(el("span")); [...d.children].forEach((s,k)=>s.classList.toggle("on",FACES[v].includes(k))); }
+function setFace(d,v){ if(!d.children.length) for(let k=0;k<9;k++) d.appendChild(el("span")); [...d.children].forEach((s,k)=>s.classList.toggle("on",FACES[v].includes(k))); }
+function setDie(i,v){ setFace($("#die"+i),v); setFace($("#bd"+i),v); }
 function renderPlay(){
   const t=cur(); if(!t) return;
   $("#turnBar").style.setProperty("--c",t.color);
@@ -883,7 +905,7 @@ function addTeam(name){
 }
 function startGame(){
   if(S.teams.length<2) return; sfx.unlock(); music.stop();
-  S.perTeam = S.total ? Math.round(S.total/S.teams.length) : 0; S.pendingOut=false;
+  S.perTeam = S.clock; S.pendingOut=false;
   S.order=shuffle(S.teams.map(t=>t.id)); S.teams.forEach(t=>{ t.pos=1; t.time=S.perTeam; t.out=false; });
   S.turn=0; S.deck=shuffle(QUESTIONS.map((_,i)=>i)); S.qCount=0;
   S.paused=false; S.winners=[]; S.qi=null; S.picked=null; S.rolled=false;
@@ -915,13 +937,19 @@ function timeOut(){
 async function roll(){
   if(S.phase!=="correct" || busy) return; busy=true;
   S.phase="rolling"; render(); sfx.roll();
-  const dice=$("#dice"); dice.classList.add("rolling");
-  const until=performance.now()+(reduced()?100:750);
+  const dice=$("#dice"), stage=$("#diceStage"), num=$("#rollNum"), eq=$("#rollEq");
+  num.hidden=true; eq.hidden=true; stage.classList.remove("landed"); stage.classList.add("rolling"); stage.hidden=false; dice.classList.add("rolling");
+  const until=performance.now()+(reduced()?100:1000);
   while(performance.now()<until){ setDie(0,1+rnd(6)); setDie(1,1+rnd(6)); await sleep(70); }
-  dice.classList.remove("rolling");
-  S.dice=[1+rnd(6),1+rnd(6)]; S.rolled=true; S.phase="moving"; render();
-  const t=cur(); const steps=S.dice[0]+S.dice[1];
-  await sleep(250);
+  S.dice=[1+rnd(6),1+rnd(6)]; setDie(0,S.dice[0]); setDie(1,S.dice[1]);
+  dice.classList.remove("rolling"); stage.classList.remove("rolling"); stage.classList.add("landed");
+  const steps=S.dice[0]+S.dice[1];
+  eq.textContent=`${S.dice[0]} + ${S.dice[1]}`; num.textContent=String(steps); eq.hidden=false; num.hidden=false; sfx.reveal();
+  await sleep(1500);
+  stage.hidden=true;
+  S.rolled=true; S.phase="moving"; render();
+  const t=cur();
+  await sleep(150);
   for(let k=0;k<steps && t.pos<N;k++){
     t.pos++; placeTokens(); sfx.tick(); const e=tokenEl(t); e.classList.remove("hop"); void e.offsetWidth; e.classList.add("hop");
     await sleep(200);
@@ -1015,7 +1043,7 @@ function wire(){
   $("#cancelAdd").onclick=closeForm;
   input.addEventListener("keydown",e=>{ if(e.key==="Escape"){ e.preventDefault(); closeForm(); } });
   form.addEventListener("submit",e=>{ e.preventDefault(); const name=(input.value.trim()||input.placeholder).slice(0,24); addTeam(name); closeForm(); });
-  document.querySelectorAll("#timeSeg button").forEach(b=>b.onclick=()=>{ S.total=+b.dataset.t; render(); });
+  document.querySelectorAll("#timeSeg button").forEach(b=>b.onclick=()=>{ S.clock=+b.dataset.t; render(); });
   $("#startBtn").onclick=startGame;
   $("#beginBtn").onclick=begin;
   $("#actionBtn").onclick=()=>{ if(S.phase==="correct") roll(); else if(S.phase==="wrong"||S.phase==="moved") next(); };
@@ -1045,7 +1073,7 @@ function wire(){
 
 /* ================= boot (keeps a running game through live updates) ================= */
 function boot(data){
-  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); if(![150,180,210,240,0].includes(S.total)) S.total=180; S.teams.forEach(t=>{ if(typeof t.time!=="number") t.time=S.perTeam; }); }
+  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); if(![150,180,210,240,0].includes(S.clock)) S.clock=210; S.teams.forEach(t=>{ if(typeof t.time!=="number") t.time=S.perTeam; }); }
   drawSky(); drawBoard(); wire(); renderMute(); render();
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>placeTokens());
 }

@@ -201,6 +201,20 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
 .standings li.win{background:var(--orange-l)}
 .standings li.win .sq{color:var(--ink)}
 .win-title{font-size:clamp(20px,2.6vw,34px);line-height:1.35;color:var(--orange);animation:blink .8s steps(1) infinite}
+.win-modal{width:min(700px,100%)}
+.victory{display:flex;align-items:center;gap:22px;padding:16px;border:4px solid var(--ink);background:var(--royal);box-shadow:inset -5px -5px 0 rgba(0,0,0,.25),inset 5px 5px 0 rgba(255,255,255,.25)}
+.bubble{position:relative;flex:1;min-width:0;margin:0;background:var(--white);border:4px solid var(--ink);padding:14px 16px;font-family:var(--display);font-size:clamp(12px,1.45vw,19px);line-height:1.7;color:var(--ink);text-transform:uppercase}
+.bubble::before{content:"";position:absolute;right:-20px;top:calc(50% - 13px);width:20px;height:26px;background:var(--ink);clip-path:polygon(0 0,100% 50%,0 100%)}
+.bubble::after{content:"";position:absolute;right:-12px;top:calc(50% - 8px);width:12px;height:16px;background:var(--white);clip-path:polygon(0 0,100% 50%,0 100%)}
+.bubble .wv{display:inline-block;white-space:pre;animation:wave 1s steps(4) infinite;animation-delay:calc(var(--i) * -70ms)}
+.bubble .wv.o{color:var(--orange)}
+.dancer{flex:none;width:120px;height:auto;image-rendering:pixelated;animation:dance .7s steps(1) infinite;filter:drop-shadow(4px 4px 0 var(--ink))}
+.grade{position:absolute;right:-12px;top:-30px;width:96px;height:96px;background:var(--bad);clip-path:var(--step);z-index:3;transform:rotate(-12deg);animation:stamp .3s steps(3) 2.2s both}
+.grade span{position:absolute;inset:8px;background:var(--white);clip-path:var(--step);display:grid;place-items:center;font-family:var(--display);font-size:44px;color:var(--bad);text-shadow:3px 3px 0 rgba(0,0,0,.15)}
+@keyframes wave{50%{transform:translateY(-5px)}}
+@keyframes dance{0%{transform:translateY(0) scaleX(1)}25%{transform:translateY(-12px) scaleX(1)}50%{transform:translateY(0) scaleX(-1)}75%{transform:translateY(-12px) scaleX(-1)}}
+@keyframes stamp{from{transform:rotate(-12deg) scale(3);opacity:0}to{transform:rotate(-12deg) scale(1);opacity:1}}
+@media (max-width:540px){ .victory{flex-direction:column-reverse;gap:14px} .bubble::before,.bubble::after{display:none} .grade{right:4px;top:-20px;width:72px;height:72px} .grade span{font-size:32px} }
 .btn-row{display:flex;gap:12px;flex-wrap:wrap}
 #confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;image-rendering:pixelated}
 
@@ -346,13 +360,19 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
 <!-- winner -->
 <div class="overlay" id="winOverlay" hidden>
   <canvas id="confetti"></canvas>
-  <div class="pcard modal" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+  <div class="pcard modal win-modal" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <div class="grade" aria-hidden="true"><span>A</span></div>
     <p class="eyebrow" id="winReason"></p>
     <h2 class="win-title outline" id="winTitle"></h2>
+    <div class="victory">
+      <p class="bubble" id="plea" aria-label="Mr Silva Give Me An A Please"></p>
+      <img class="dancer" id="dancer" alt="Silva dancing">
+    </div>
     <ol class="standings" id="standings"></ol>
     <div class="btn-row">
       <button class="btn blue big" type="button" id="rematchBtn">Rematch</button>
       <button class="btn big" type="button" id="changeBtn">Change teams</button>
+      <button class="btn orange big" type="button" id="musicBtn">▶ Play music</button>
     </div>
   </div>
 </div>
@@ -521,9 +541,67 @@ const sfx = (() => {
     slide(){ tone(1600,1.2,{type:"triangle",to:150,vol:.16}); },
     win(){ [523,523,523,698,880,784,1047].forEach((f,i)=>tone(f,i===6?.6:.14,{at:[0,.15,.3,.45,.65,.85,1.05][i],vol:.08})); },
     buzzer(){ tone(130,.7,{vol:.07}); },
+    stamp(){ tone(110,.14,{vol:.14}); tone(70,.2,{vol:.12,at:.02}); },
+    ctx(){ return ac(); },
     toggle(){ muted=!muted; try{ localStorage.setItem("silvas-muted",muted?"1":"0"); }catch(e){} if(!muted) ac(); return muted; },
     isMuted(){ return muted; }
   };
+})();
+
+/* ================= victory music: an original goofy chiptune polka ================= */
+const music = (() => {
+  let master=null, endTimer=null;
+  const NOTE=(n)=>{ const m=n.match(/^([A-G])(#|b)?(\d)$/); const st={C:0,D:2,E:4,F:5,G:7,A:9,B:11}[m[1]]+(m[2]==="#"?1:m[2]==="b"?-1:0); return 440*Math.pow(2,(12*(+m[3]+1)+st-69)/12); };
+  function stop(){
+    clearTimeout(endTimer); endTimer=null;
+    if(!master) return; const m=master; master=null;
+    try{ const t=m.context.currentTime; m.gain.cancelScheduledValues(t); m.gain.setValueAtTime(m.gain.value,t); m.gain.linearRampToValueAtTime(0,t+.15); }catch(e){}
+    setTimeout(()=>{ try{ m.disconnect(); }catch(e){} },400);
+    updateBtn();
+  }
+  function updateBtn(){ const b=document.getElementById("musicBtn"); if(b) b.textContent = master ? "■ Stop music" : "▶ Play music"; }
+  function play(){
+    stop(); const c=sfx.ctx(); if(!c) return;
+    master=c.createGain(); master.gain.value=.55; master.connect(c.destination); const out=master;
+    const beat=60/172, t0=c.currentTime+.08, at=(b)=>t0+b*beat;
+    const noise=c.createBuffer(1,Math.floor(c.sampleRate*.6),c.sampleRate); const nd=noise.getChannelData(0); for(let i=0;i<nd.length;i++) nd[i]=Math.random()*2-1;
+    const env=(g,t,d,v)=>{ g.gain.setValueAtTime(.0001,t); g.gain.exponentialRampToValueAtTime(v,t+.015); g.gain.setValueAtTime(v,t+Math.max(.02,d*.72)); g.gain.exponentialRampToValueAtTime(.0001,t+d); };
+    function kazoo(f,t,d,v=.17){ const o=c.createOscillator(); o.type="sawtooth"; o.frequency.setValueAtTime(f,t);
+      const lfo=c.createOscillator(); lfo.frequency.value=6.5; const lg=c.createGain(); lg.gain.value=f*.013; lfo.connect(lg); lg.connect(o.frequency);
+      const bp=c.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=Math.min(4200,f*2.1); bp.Q.value=1.3;
+      const g=c.createGain(); env(g,t,d,v); o.connect(bp); bp.connect(g); g.connect(out); o.start(t); lfo.start(t); o.stop(t+d+.02); lfo.stop(t+d+.02); }
+    function blip(f,t,d,v,type){ const o=c.createOscillator(); o.type=type; o.frequency.setValueAtTime(f,t); const g=c.createGain(); env(g,t,d,v); o.connect(g); g.connect(out); o.start(t); o.stop(t+d+.02); }
+    function kick(t){ const o=c.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(170,t); o.frequency.exponentialRampToValueAtTime(45,t+.13); const g=c.createGain(); g.gain.setValueAtTime(.55,t); g.gain.exponentialRampToValueAtTime(.0001,t+.16); o.connect(g); g.connect(out); o.start(t); o.stop(t+.18); }
+    function hiss(t,v,len,hp){ const s=c.createBufferSource(); s.buffer=noise; const f=c.createBiquadFilter(); f.type="highpass"; f.frequency.value=hp; const g=c.createGain(); g.gain.setValueAtTime(v,t); g.gain.exponentialRampToValueAtTime(.0001,t+len); s.connect(f); f.connect(g); g.connect(out); s.start(t); s.stop(t+len+.02); }
+    function whistle(t,f0,f1,d){ const o=c.createOscillator(); o.type="sine"; o.frequency.setValueAtTime(f0,t); o.frequency.exponentialRampToValueAtTime(f1,t+d); const g=c.createGain(); env(g,t,d,.2); o.connect(g); g.connect(out); o.start(t); o.stop(t+d+.02); }
+    function honk(t){ [330,336].forEach(f=>{ const o=c.createOscillator(); o.type="sawtooth"; o.frequency.setValueAtTime(f,t); o.frequency.linearRampToValueAtTime(f*.88,t+.2); const bp=c.createBiquadFilter(); bp.type="bandpass"; bp.frequency.value=950; bp.Q.value=2.2; const g=c.createGain(); env(g,t,.22,.33); o.connect(bp); bp.connect(g); g.connect(out); o.start(t); o.stop(t+.25); }); }
+    // lead melody: [note, beats]
+    const MEL=[["G4",.5],["C5",.5],["E5",.5],["G5",.5],["E5",.5],["G5",.5],["C6",1],
+      ["A5",.5],["G5",.5],["F5",.5],["A5",.5],["C6",1],["A5",1],
+      ["B5",.5],["A5",.5],["G5",.5],["F5",.5],["D5",.5],["F5",.5],["G5",1],
+      ["E5",.5],["D5",.5],["C5",1],[null,2],
+      ["C6",.25],["C6",.25],["B5",.5],["C6",.5],["G5",.5],["E5",.5],["G5",.5],["C6",1],
+      ["F5",.5],["A5",.5],["C6",.5],["F6",.5],["E6",.5],["D6",.5],["C6",1],
+      ["B5",.5],["D6",.5],["F6",.5],["D6",.5],["B5",.5],["G5",.5],["A5",.5],["B5",.5],
+      ["C6",1],["G5",.5],["C6",.5]];
+    let b=0; for(const [n,d] of MEL){ if(n) kazoo(NOTE(n),at(b),d*beat*.92); b+=d; }
+    // oom-pah bass + chords, drums
+    const CH=[["C3",["C4","E4","G4"]],["F2",["F4","A4","C5"]],["G2",["B3","D4","G4"]],["C3",["C4","E4","G4"]],
+              ["C3",["C4","E4","G4"]],["F2",["F4","A4","C5"]],["G2",["B3","D4","F4"]],["C3",["C4","E4","G4"]]];
+    CH.forEach(([root,tri],bar)=>{ for(let k=0;k<4;k++){ const B=bar*4+k; if((bar===3||bar===7)&&k>=2) continue;
+      if(k%2===0){ blip(NOTE(root),at(B),beat*.8,.24,"triangle"); kick(at(B)); }
+      else { tri.forEach(n=>blip(NOTE(n),at(B),beat*.35,.035,"square")); hiss(at(B),.16,.11,1800); }
+      hiss(at(B+.5),.045,.035,6000); } });
+    // silly bits
+    whistle(at(14),380,1700,beat*1.6);
+    tri3(at(30));
+    function tri3(t){ ["C6","E6","G6"].forEach(n=>kazoo(NOTE(n),t,beat*1.6,.11)); kick(t); hiss(t,.22,.5,1200); }
+    honk(at(31.7)); honk(at(32.25));
+    const dur=(32.6*beat+.4)*1000;
+    endTimer=setTimeout(()=>{ master=null; updateBtn(); }, dur);
+    updateBtn();
+  }
+  return { play, stop, toggle(){ if(master) stop(); else play(); } };
 })();
 
 /* ================= pixel sky background ================= */
@@ -757,7 +835,7 @@ function addTeam(name){
   S.teams.push({ id:S.nextId++, name, color, pos:1 }); render();
 }
 function startGame(){
-  if(S.teams.length<2) return; sfx.unlock();
+  if(S.teams.length<2) return; sfx.unlock(); music.stop();
   S.order=shuffle(S.teams.map(t=>t.id)); S.teams.forEach(t=>t.pos=1);
   S.turn=0; S.deck=shuffle(QUESTIONS.map((_,i)=>i)); S.qCount=0;
   S.timeLeft=S.timeLimit; S.timeUp=false; S.running=false; S.winners=[]; S.qi=null; S.picked=null; S.rolled=false;
@@ -826,7 +904,8 @@ function next(){
   S.turn=(S.turn+1)%S.order.length; newTurn();
 }
 function endByPosition(reason){ const max=Math.max(...S.teams.map(t=>t.pos)); win(S.teams.filter(t=>t.pos===max).map(t=>t.id), reason); }
-function win(ids, reason){ S.winners=ids; S.winBy=reason; S.running=false; S.phase="over"; sfx.win(); render(); confetti(); }
+function win(ids, reason){ S.winners=ids; S.winBy=reason; S.running=false; S.phase="over"; render(); confetti(); music.play();
+  clearTimeout(win.stampTimer); win.stampTimer=setTimeout(()=>{ if(S.phase==="over") sfx.stamp(); }, reduced()?0:2300); }
 
 /* ================= timer ================= */
 let lastTick=performance.now();
@@ -852,6 +931,11 @@ function confetti(){
 /* ================= wiring ================= */
 function wire(){
   $("#logoImg").src=spriteURL(SILVA,4);
+  $("#dancer").src=SILVA_URL;
+  const plea=$("#plea"); const words="Mr Silva Give Me An A Please".split(" "); let k=0;
+  words.forEach((w,wi)=>{ const span=el("span"); span.style.whiteSpace="nowrap";
+    [...w].forEach(ch=>{ const l=el("span","wv"+(w==="A"?" o":""),ch); l.style.setProperty("--i",String(k++)); span.appendChild(l); });
+    plea.appendChild(span); if(wi<words.length-1) plea.appendChild(document.createTextNode(" ")); });
   const form=$("#addForm"), input=$("#teamName");
   $("#addBtn").onclick=()=>{ form.hidden=false; $("#addBtn").hidden=true; input.value=""; input.placeholder="Team "+(S.teams.length+1); input.focus(); };
   const closeForm=()=>{ form.hidden=true; $("#addBtn").hidden=false; $("#addBtn").focus(); };
@@ -870,7 +954,8 @@ function wire(){
     if(b.classList.contains("armed")){ clearTimeout(armTimer); b.classList.remove("armed"); b.textContent="End game"; busy=false; endByPosition("Game ended early. Furthest team wins"); return; }
     b.classList.add("armed"); b.textContent="Click again to end"; armTimer=setTimeout(()=>{ b.classList.remove("armed"); b.textContent="End game"; },3000); };
   $("#rematchBtn").onclick=startGame;
-  $("#changeBtn").onclick=()=>{ S.phase="setup"; S.teams.forEach(t=>t.pos=1); S.running=false; render(); };
+  $("#musicBtn").onclick=()=>music.toggle();
+  $("#changeBtn").onclick=()=>{ music.stop(); S.phase="setup"; S.teams.forEach(t=>t.pos=1); S.running=false; render(); };
   document.addEventListener("keydown",(e)=>{
     if(e.target.closest && e.target.closest("input,textarea,select")) return;
     if(e.metaKey||e.ctrlKey||e.altKey) return;

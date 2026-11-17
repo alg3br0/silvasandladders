@@ -1,0 +1,899 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Silvas and Ladders</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;600;700&display=swap">
+<style>
+/* Layout: one-screen 8-bit game table over a pixel sky. Wide 7x4 pixel board on the left, proctor panel on the right; stacks on narrow screens.
+   Deliberately single-theme: retro arcade in Bishop Gorman royal blue + orange, every color set explicitly. */
+:root{
+  --sky:#55BFFF;
+  --ink:#121018;
+  --white:#FFFFFF;
+  --royal:#1F4FD8;
+  --royal-d:#14369C;
+  --royal-l:#D6E1FF;
+  --orange:#FF7A1A;
+  --orange-d:#D35A05;
+  --orange-l:#FFC48F;
+  --panel:#FFFFFF;
+  --panel-2:#EEF3FF;
+  --muted:#4C4F6B;
+  --good:#1FB43F;
+  --bad:#EE2F3A;
+  --lcd:#1A1C2C;
+  --scrim:rgba(18,16,24,.66);
+  --display:"Press Start 2P","Courier New",ui-monospace,monospace;
+  --body:"Pixelify Sans","Trebuchet MS",system-ui,sans-serif;
+  --ar:1.75;
+  --cols:7;
+  --step:polygon(25% 0,75% 0,75% 9%,91% 9%,91% 25%,100% 25%,100% 75%,91% 75%,91% 91%,75% 91%,75% 100%,25% 100%,25% 91%,9% 91%,9% 75%,0 75%,0 25%,9% 25%,9% 9%,25% 9%);
+  color-scheme:light;
+}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{margin:0;background:var(--sky);color:var(--ink);font-family:var(--body);font-weight:600;font-variant-ligatures:none}
+#sky{position:fixed;inset:0;width:100%;height:100%;image-rendering:pixelated;z-index:0;pointer-events:none}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,input:focus-visible{outline:4px dashed var(--ink);outline-offset:3px}
+.app{
+  position:relative;z-index:1;min-height:100%;box-sizing:border-box;display:flex;flex-direction:column;gap:16px;
+  padding-block:14px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+}
+
+/* ---------- header ---------- */
+.top{display:flex;align-items:center;gap:12px 18px;flex-wrap:wrap}
+.logo{display:flex;align-items:center;gap:12px;margin-right:auto;min-width:0}
+.logo img{width:54px;height:auto;image-rendering:pixelated;filter:drop-shadow(3px 3px 0 var(--ink))}
+.logo h1{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(14px,1.75vw,26px);line-height:1.35;letter-spacing:1px}
+.outline{text-shadow:-2px 0 0 var(--ink),2px 0 0 var(--ink),0 -2px 0 var(--ink),0 2px 0 var(--ink),-2px -2px 0 var(--ink),2px -2px 0 var(--ink),-2px 2px 0 var(--ink),2px 2px 0 var(--ink),4px 4px 0 var(--ink)}
+.logo h1 .o{color:var(--orange)}
+.logo h1 .w{color:var(--white)}
+.order{display:flex;flex-wrap:wrap;gap:8px;margin:0;padding:0;list-style:none}
+.chip{display:flex;align-items:center;gap:8px;padding:7px 11px 7px 9px;border:3px solid var(--ink);background:var(--panel);font-family:var(--display);font-size:11px;line-height:1.2;white-space:nowrap;box-shadow:3px 3px 0 var(--ink)}
+.chip .sw{width:14px;height:14px;background:var(--c);box-shadow:inset -3px -3px 0 rgba(0,0,0,.28)}
+.chip .sq{color:var(--muted)}
+.chip.now{background:var(--orange-l)}
+.chip.now .sq{color:var(--ink)}
+.tools{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.timer{display:flex;align-items:center;gap:10px;padding:6px 6px 6px 12px;background:var(--lcd);border:4px solid var(--ink);box-shadow:4px 4px 0 var(--ink)}
+.timer .lbl{font-family:var(--display);font-size:9px;color:var(--white)}
+.timer .t{font-family:var(--display);font-size:22px;line-height:1;color:var(--orange);min-width:5ch;text-align:center}
+.timer.low .t{color:var(--bad)}
+.timer.up{animation:blink 1s steps(1) infinite}
+.timer.up .t{color:var(--bad)}
+.icon-btn{display:inline-flex;align-items:center;gap:8px;border:3px solid var(--ink);background:var(--panel);padding:7px 10px;font-family:var(--display);font-size:9px;line-height:1.2;box-shadow:3px 3px 0 var(--ink)}
+.icon-btn:active{transform:translate(2px,2px);box-shadow:1px 1px 0 var(--ink)}
+.icon-btn svg{width:18px;height:18px;shape-rendering:crispEdges}
+.timer .icon-btn{box-shadow:none;border-width:2px;padding:5px 7px}
+.icon-btn.armed{background:var(--bad);color:var(--white)}
+
+/* ---------- stage ---------- */
+.stage{flex:1;display:grid;grid-template-columns:auto minmax(0,1fr);gap:24px;align-items:start;min-height:0}
+.board-col{
+  --size:min(calc((100vh - 170px) * var(--ar)),64vw);
+  --size:min(calc((100dvh - 170px) * var(--ar)),64vw);
+  width:var(--size);max-width:100%;display:flex;flex-direction:column;gap:14px;min-width:0;
+}
+.board-wrap{
+  width:100%;aspect-ratio:var(--ar);position:relative;container-type:inline-size;box-sizing:border-box;
+  border:6px solid var(--ink);background:var(--ink);box-shadow:8px 8px 0 var(--ink);
+}
+.board-wrap canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;display:block}
+.board-wrap svg{position:absolute;inset:0;width:100%;height:100%;display:block;pointer-events:none}
+.num{font-family:var(--display);font-size:7px;fill:var(--white);stroke:var(--ink);stroke-width:2.2px;paint-order:stroke;stroke-linejoin:miter}
+.sqlabel{font-family:var(--display);font-size:5.4px;fill:var(--white);stroke:var(--ink);stroke-width:2px;paint-order:stroke}
+
+.token{position:absolute;left:7%;top:88%;width:var(--tw,8%);aspect-ratio:1;transform:translate(-50%,-55%);transition:left .17s steps(3),top .17s steps(3),width .2s;z-index:2}
+.token .o{position:absolute;inset:0;background:var(--ink);clip-path:var(--step)}
+.token .i{position:absolute;inset:11%;background:var(--c);clip-path:var(--step);box-shadow:inset -.4cqw -.4cqw 0 rgba(0,0,0,.3),inset .4cqw .4cqw 0 rgba(255,255,255,.45);display:grid;place-items:center;font-family:var(--display);font-size:calc(9.5cqw / var(--cols,7));line-height:1;color:var(--white);text-shadow:.2cqw .2cqw 0 var(--ink)}
+.token.now{z-index:4}
+.token.now::after{content:"";position:absolute;left:50%;bottom:104%;width:44%;aspect-ratio:2/1;transform:translateX(-50%);background:var(--orange);clip-path:polygon(0 0,100% 0,100% 25%,75% 25%,75% 50%,62% 50%,62% 75%,38% 75%,38% 50%,25% 50%,25% 25%,0 25%);animation:bob .6s steps(2) infinite}
+.token.glide{transition:none}
+.token.hop{animation:hop .17s steps(3)}
+
+.event{
+  position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:6;
+  display:flex;align-items:center;gap:16px;padding:16px 24px 16px 16px;width:max-content;max-width:80%;box-sizing:border-box;
+  border:6px solid var(--ink);box-shadow:8px 8px 0 var(--ink);animation:popc .3s steps(4);
+}
+.event img{width:16cqw;max-width:160px;height:auto;flex:none;image-rendering:pixelated}
+.event.ladder{background:var(--royal)}
+.event.silva{background:var(--orange)}
+.event-title{margin:0;font-family:var(--display);font-size:clamp(18px,3.4cqw,36px);line-height:1.15;color:var(--white);text-shadow:-3px 0 0 var(--ink),3px 0 0 var(--ink),0 -3px 0 var(--ink),0 3px 0 var(--ink),4px 4px 0 var(--ink)}
+.event-sub{margin:10px 0 0;font-size:clamp(16px,2cqw,24px);font-weight:700;color:var(--white);text-shadow:2px 2px 0 var(--ink)}
+
+/* ---------- panel ---------- */
+.panel{display:flex;flex-direction:column;gap:14px;min-width:0;container-type:inline-size}
+.pcard{background:var(--panel);border:5px solid var(--ink);box-shadow:7px 7px 0 var(--ink)}
+.eyebrow{margin:0;font-family:var(--display);font-size:10px;line-height:1.5;color:var(--muted);letter-spacing:.5px}
+h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4vw,22px);line-height:1.4}
+.btn{
+  display:inline-flex;align-items:center;justify-content:center;gap:10px;border:4px solid var(--ink);padding:14px 18px;
+  font-family:var(--display);font-size:clamp(11px,.9vw,15px);line-height:1.35;text-transform:uppercase;background:var(--white);color:var(--ink);
+  box-shadow:inset -4px -4px 0 rgba(0,0,0,.24),inset 4px 4px 0 rgba(255,255,255,.45),0 6px 0 var(--ink);transition:transform .06s steps(1);
+}
+.btn:active:not(:disabled){transform:translateY(4px);box-shadow:inset -4px -4px 0 rgba(0,0,0,.24),inset 4px 4px 0 rgba(255,255,255,.45),0 2px 0 var(--ink)}
+.btn:disabled{filter:grayscale(1);opacity:.55;cursor:not-allowed}
+.btn.blue{background:var(--royal);color:var(--white);text-shadow:2px 2px 0 var(--ink)}
+.btn.orange{background:var(--orange);color:var(--white);text-shadow:2px 2px 0 var(--ink)}
+.btn.big{font-size:clamp(12px,1.05vw,17px);padding:16px 20px}
+
+/* setup */
+.setup{padding:20px;display:flex;flex-direction:column;gap:16px}
+.setup p{margin:0}
+.lead{font-size:clamp(17px,1.2vw,20px);line-height:1.4;max-width:60ch}
+.teams{list-style:none;margin:0;padding:0;display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:10px}
+.team-row{display:flex;align-items:center;gap:10px;padding:8px 8px 8px 10px;border:3px solid var(--ink);background:var(--panel-2);min-width:0}
+.team-row .sw{flex:none;width:30px;height:30px;background:var(--c);box-shadow:inset -4px -4px 0 rgba(0,0,0,.28),inset 4px 4px 0 rgba(255,255,255,.4);border:3px solid var(--ink);display:grid;place-items:center;color:var(--white);font-family:var(--display);font-size:9px;text-shadow:1px 1px 0 var(--ink)}
+.team-row .name{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:700;font-size:20px}
+.x{flex:none;border:3px solid var(--ink);background:var(--white);width:32px;height:32px;font-family:var(--display);font-size:12px;line-height:1;padding:0}
+.x:hover{background:var(--bad);color:var(--white)}
+.empty{padding:14px;border:3px dashed var(--ink);font-size:18px;color:var(--muted)}
+.add-form{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px;border:4px solid var(--ink);background:var(--orange-l)}
+.add-form label{width:100%;font-family:var(--display);font-size:11px}
+.add-form input{flex:1 1 160px;min-width:0;font-family:var(--body);font-size:22px;font-weight:700;padding:10px 12px;border:4px solid var(--ink);border-radius:0;background:var(--white);color:var(--ink)}
+.seg{display:inline-flex;border:4px solid var(--ink);background:var(--white);flex-wrap:wrap}
+.seg button{border:0;background:transparent;padding:10px 12px;font-family:var(--display);font-size:10px}
+.seg button+button{border-left:3px solid var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--royal);color:var(--white);text-shadow:2px 2px 0 var(--ink)}
+.opt-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.rules{margin:0;padding:12px 14px 12px 36px;background:var(--panel-2);border:3px solid var(--ink);line-height:1.4;font-size:clamp(16px,1.1vw,19px)}
+.rules b{font-weight:700;color:var(--royal)}
+.start-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+.hint{font-family:var(--display);font-size:10px;line-height:1.5;color:var(--muted)}
+
+/* play */
+.play{display:flex;flex-direction:column;gap:12px}
+.turn{display:flex;align-items:center;gap:14px;padding:12px 16px;border:5px solid var(--ink);background:var(--c);box-shadow:7px 7px 0 var(--ink),inset -5px -5px 0 rgba(0,0,0,.25),inset 5px 5px 0 rgba(255,255,255,.35)}
+.turn .who{font-family:var(--display);font-size:clamp(13px,1.2vw,20px);line-height:1.35;color:var(--white);min-width:0;overflow-wrap:anywhere;
+  text-shadow:-2px 0 0 var(--ink),2px 0 0 var(--ink),0 -2px 0 var(--ink),0 2px 0 var(--ink),3px 3px 0 var(--ink)}
+.turn .where{margin-left:auto;font-family:var(--display);font-size:10px;background:var(--ink);color:var(--orange);padding:7px 10px;white-space:nowrap}
+.qcard{padding:14px 16px 16px;display:flex;flex-direction:column;gap:8px}
+.qtext{margin:0;font-size:clamp(22px,1.95vw,34px);line-height:1.2;font-weight:700;text-wrap:balance}
+.answers{display:grid;grid-template-columns:1fr;gap:10px}
+@container (min-width:360px){ .answers{grid-template-columns:1fr 1fr} .ans{font-size:clamp(16px,1.25vw,22px);padding:8px 10px 8px 8px;gap:10px} }
+.ans{
+  display:flex;align-items:center;gap:12px;text-align:left;padding:8px 14px 8px 8px;border:4px solid var(--ink);background:var(--white);
+  font-family:var(--body);font-weight:700;font-size:clamp(17px,1.35vw,24px);line-height:1.15;min-height:50px;
+  box-shadow:inset -4px -4px 0 rgba(0,0,0,.12),0 5px 0 var(--ink);
+}
+.ans:hover:not(:disabled){background:var(--panel-2)}
+.ans:active:not(:disabled){transform:translateY(4px);box-shadow:inset -4px -4px 0 rgba(0,0,0,.12),0 1px 0 var(--ink)}
+.ans .letter{flex:none;width:34px;height:34px;border:3px solid var(--ink);background:var(--royal);color:var(--white);display:grid;place-items:center;font-family:var(--display);font-size:14px;text-shadow:2px 2px 0 var(--ink);box-shadow:inset -3px -3px 0 rgba(0,0,0,.28),inset 3px 3px 0 rgba(255,255,255,.35)}
+.ans .txt{min-width:0;overflow-wrap:break-word;hyphens:auto}
+.ans:disabled{cursor:default}
+.ans.dim{background:var(--panel-2);color:var(--muted);box-shadow:0 5px 0 var(--ink)}
+.ans.dim .letter{background:var(--muted)}
+.ans.right{background:var(--good);color:var(--white);opacity:1}
+.ans.wrong{background:var(--bad);color:var(--white);opacity:1;animation:shake .4s steps(4)}
+.verdict{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:12px 16px;border:5px solid var(--ink);box-shadow:7px 7px 0 var(--ink)}
+.verdict.good{background:var(--good)}
+.verdict.bad{background:var(--bad)}
+.verdict .stamp{font-family:var(--display);font-size:clamp(15px,1.45vw,22px);color:var(--white);text-shadow:3px 3px 0 var(--ink);animation:blink .5s steps(1) 3}
+.verdict .more{font-size:clamp(18px,1.35vw,22px);font-weight:700;color:var(--white);text-shadow:2px 2px 0 var(--ink)}
+.actions{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.dice{display:flex;align-items:center;gap:12px}
+.die{width:54px;height:54px;border:4px solid var(--ink);background:var(--white);box-shadow:inset -4px -4px 0 rgba(0,0,0,.15),4px 4px 0 var(--ink);display:grid;grid-template-columns:repeat(3,1fr);grid-template-rows:repeat(3,1fr);padding:6px;box-sizing:border-box;gap:3px}
+.die span.on{background:var(--ink)}
+.dice.rolling .die{animation:tumble .24s steps(4) infinite}
+.dice.rolling .die:nth-child(2){animation-direction:reverse}
+.sum{font-family:var(--display);font-size:22px;min-width:3ch;color:var(--white);text-shadow:-2px 0 0 var(--ink),2px 0 0 var(--ink),0 -2px 0 var(--ink),0 2px 0 var(--ink),3px 3px 0 var(--ink)}
+.actions .btn{margin-left:auto}
+.keys{margin:0;font-size:15px;color:var(--ink);background:rgba(255,255,255,.8);padding:5px 10px;align-self:flex-start;border:2px solid var(--ink)}
+.keys kbd{font-family:var(--display);font-size:9px;border:2px solid var(--ink);padding:2px 5px;background:var(--white)}
+.timeup-note{padding:12px 14px;border:5px solid var(--ink);background:var(--bad);color:var(--white);font-family:var(--display);font-size:11px;line-height:1.6;text-shadow:2px 2px 0 var(--ink);animation:blink 1s steps(1) infinite}
+
+/* overlays */
+.overlay{position:fixed;inset:0;z-index:50;display:grid;place-items:center;background:var(--scrim);padding:16px;box-sizing:border-box;overflow:auto}
+.modal{position:relative;z-index:2;width:min(580px,100%);padding:26px;display:flex;flex-direction:column;gap:18px;box-sizing:border-box;animation:popm .3s steps(4)}
+.order-list,.standings{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:10px}
+.order-list li,.standings li{display:flex;align-items:center;gap:12px;padding:10px 12px;border:3px solid var(--ink);background:var(--panel-2);font-weight:700;font-size:22px;animation:slidein .35s steps(4) both}
+.order-list .n,.standings .n{flex:none;font-family:var(--display);font-size:14px;width:2.2ch;text-align:center}
+.order-list .sw,.standings .sw{flex:none;width:24px;height:24px;background:var(--c);border:3px solid var(--ink);box-shadow:inset -3px -3px 0 rgba(0,0,0,.28)}
+.order-list .nm,.standings .nm{flex:1;min-width:0;overflow-wrap:anywhere}
+.standings .sq{font-family:var(--display);font-size:10px;color:var(--muted)}
+.standings li.win{background:var(--orange-l)}
+.standings li.win .sq{color:var(--ink)}
+.win-title{font-size:clamp(20px,2.6vw,34px);line-height:1.35;color:var(--orange);animation:blink .8s steps(1) infinite}
+.btn-row{display:flex;gap:12px;flex-wrap:wrap}
+#confetti{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:1;image-rendering:pixelated}
+
+@keyframes hop{50%{transform:translate(-50%,-85%)}}
+@keyframes bob{50%{transform:translate(-50%,-30%)}}
+@keyframes popc{from{transform:translate(-50%,-50%) scale(.4)}}
+@keyframes popm{from{transform:scale(.5)}}
+@keyframes shake{25%{translate:-6px 0}75%{translate:6px 0}}
+@keyframes tumble{to{transform:rotate(360deg)}}
+@keyframes blink{50%{opacity:.4}}
+@keyframes slidein{from{transform:translateX(-30px);opacity:0}}
+
+@media (max-width:1000px){
+  .stage{grid-template-columns:minmax(0,1fr)}
+  .board-col{--size:100%;width:100%;max-width:900px;justify-self:center}
+}
+@media (max-width:540px){
+  .logo img{width:40px}
+  .die{width:46px;height:46px;padding:5px}
+  .icon-btn .lbl{display:none}
+  .board-wrap{box-shadow:5px 5px 0 var(--ink);border-width:4px}
+}
+@media (max-height:820px) and (min-width:1001px){
+  .keys{display:none}
+  .turn{padding:9px 14px}
+  .qtext{font-size:clamp(20px,1.75vw,30px)}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}
+}
+</style>
+</head>
+<body>
+
+<canvas id="sky" aria-hidden="true"></canvas>
+<div class="app">
+  <header class="top">
+    <div class="logo">
+      <img id="logoImg" alt="">
+      <h1 class="outline" aria-label="Silvas and Ladders"><span class="o">SILVAS</span> <span class="w">AND</span> <span class="o">LADDERS</span></h1>
+    </div>
+    <div class="tools">
+      <div class="timer" id="timer" hidden>
+        <span class="lbl">TIME</span>
+        <span class="t" id="timerText">4:00</span>
+        <button class="icon-btn" id="pauseBtn" type="button" aria-label="Pause timer"></button>
+      </div>
+      <button class="icon-btn" id="muteBtn" type="button"></button>
+      <button class="icon-btn" id="fsBtn" type="button" aria-label="Full screen">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 1h5v2H3v3H1zM10 1h5v5h-2V3h-3zM1 10h2v3h3v2H1zM13 10h2v5h-5v-2h3z"/></svg><span class="lbl">Full screen</span>
+      </button>
+      <button class="icon-btn" id="endBtn" type="button" hidden>End game</button>
+    </div>
+  </header>
+
+  <main class="stage">
+    <div class="board-col">
+    <div class="board-wrap" id="boardWrap">
+      <canvas id="boardCanvas" role="img" aria-label="Game board, squares 1 to 28, with ladders and Silva slides"></canvas>
+      <svg id="boardLabels" aria-hidden="true"></svg>
+      <div id="tokens"></div>
+      <div class="event" id="eventPop" hidden>
+        <img id="eventImg" alt="">
+        <div><p class="event-title" id="eventTitle"></p><p class="event-sub" id="eventSub"></p></div>
+      </div>
+    </div>
+    <ol class="order" id="orderChips" aria-label="Turn order"></ol>
+    </div>
+
+    <section class="panel" id="panel" aria-live="polite">
+      <!-- SETUP -->
+      <div class="pcard setup" id="setupView">
+        <div>
+          <p class="eyebrow">PSYCH VOCAB · MODULES 0.4–0.6</p>
+          <h2>SELECT TEAMS</h2>
+        </div>
+        <p class="lead">Add every team, then press Start. The game shuffles the teams into a random order and gives each team a vocab question on its turn.</p>
+        <ul class="teams" id="teamList"></ul>
+        <form class="add-form" id="addForm" hidden autocomplete="off">
+          <label for="teamName">TEAM NAME</label>
+          <input id="teamName" maxlength="24" placeholder="Team 1">
+          <button class="btn blue" type="submit">Confirm</button>
+          <button class="btn" type="button" id="cancelAdd">Cancel</button>
+        </form>
+        <div><button class="btn orange" type="button" id="addBtn">+ Add team</button></div>
+        <div class="opt-row">
+          <span class="eyebrow">TIME LIMIT</span>
+          <div class="seg" id="timeSeg" role="group" aria-label="Time limit">
+            <button type="button" data-t="180">3 MIN</button>
+            <button type="button" data-t="240">4 MIN</button>
+            <button type="button" data-t="300">5 MIN</button>
+            <button type="button" data-t="0">OFF</button>
+          </div>
+        </div>
+        <ol class="rules">
+          <li>Read the question out loud. The team picks <b>A, B, C or D</b>, and you click their answer.</li>
+          <li><b>Correct</b> → roll two dice and move. <b>Incorrect</b> → no roll, next team.</li>
+          <li>Land on a <b>ladder</b> → climb up. Land on a <b>Silva</b> → ride his BG slide down.</li>
+          <li>First team to <b>28</b> wins. If time runs out, the team furthest ahead wins.</li>
+        </ol>
+        <div class="start-row">
+          <button class="btn blue big" type="button" id="startBtn">▶ Start game</button>
+          <span class="hint" id="startHint"></span>
+        </div>
+      </div>
+
+      <!-- PLAY -->
+      <div class="play" id="playView" hidden>
+        <div class="turn" id="turnBar">
+          <span class="who" id="turnName"></span>
+          <span class="where" id="turnWhere"></span>
+        </div>
+        <div class="timeup-note" id="timeupNote" hidden>TIME'S UP! FINISH THIS TURN, THEN PRESS NEXT.</div>
+        <div class="pcard qcard">
+          <p class="eyebrow" id="qTag"></p>
+          <p class="qtext" id="qText"></p>
+        </div>
+        <div class="answers" id="answers"></div>
+        <div class="verdict" id="verdict" hidden></div>
+        <div class="actions">
+          <div class="dice" id="dice" aria-label="Dice">
+            <div class="die" id="die0"></div><div class="die" id="die1"></div>
+            <span class="sum" id="sum"></span>
+          </div>
+          <button class="btn big" type="button" id="actionBtn"></button>
+        </div>
+        <p class="keys">Keyboard: <kbd>A</kbd>–<kbd>D</kbd> answer · <kbd>SPACE</kbd> roll / next team</p>
+      </div>
+    </section>
+  </main>
+</div>
+
+<!-- turn order reveal -->
+<div class="overlay" id="orderOverlay" hidden>
+  <div class="pcard modal" role="dialog" aria-modal="true" aria-labelledby="orderTitle">
+    <p class="eyebrow">SHUFFLED AT RANDOM</p>
+    <h2 id="orderTitle">TURN ORDER</h2>
+    <ol class="order-list" id="orderList"></ol>
+    <button class="btn blue big" type="button" id="beginBtn">Begin</button>
+  </div>
+</div>
+
+<!-- winner -->
+<div class="overlay" id="winOverlay" hidden>
+  <canvas id="confetti"></canvas>
+  <div class="pcard modal" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <p class="eyebrow" id="winReason"></p>
+    <h2 class="win-title outline" id="winTitle"></h2>
+    <ol class="standings" id="standings"></ol>
+    <div class="btn-row">
+      <button class="btn blue big" type="button" id="rematchBtn">Rematch</button>
+      <button class="btn big" type="button" id="changeBtn">Change teams</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+"use strict";
+
+/* ================= BOARD: 7 x 4, tuned by simulation for ~3–4 min with 4–5 teams ================= */
+const COLS = 7, ROWS = 4, N = COLS * ROWS;
+const LADDERS = { 3: 12, 6: 20, 10: 24, 16: 27 };
+const SILVAS  = { 13: 2, 21: 8, 25: 11, 26: 17 };
+// how much each slide curves (in squares); positive bends left, negative bends right
+const SLIDE_BOW = { 13: 0.4, 21: 0.35, 25: -0.35, 26: 0.2 };
+
+const COLORS = ["#E8323C","#1F4FD8","#18A848","#9B45F0","#FF7A1A","#10B5B5","#F0559E","#7A8099"];
+const ROYAL = "#1F4FD8", ORANGE = "#FF7A1A";
+
+/* ================= helpers ================= */
+const $ = (s) => document.querySelector(s);
+const reduced = () => window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+const sleep = (ms) => new Promise((r) => setTimeout(r, reduced() ? Math.min(ms, 60) : ms));
+function rnd(n){ try{ const a=new Uint32Array(1); crypto.getRandomValues(a); return a[0]%n; }catch(e){ return Math.floor(Math.random()*n); } }
+function shuffle(arr){ const a=arr.slice(); for(let i=a.length-1;i>0;i--){ const j=rnd(i+1); [a[i],a[j]]=[a[j],a[i]]; } return a; }
+function el(tag, cls, text){ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; }
+function initials(name){ const p=name.trim().split(/\s+/).filter(Boolean); if(!p.length) return "?"; if(/^\d+$/.test(p[p.length-1]) && p.length>1) return p[p.length-1].slice(0,2); return (p.length>1 ? p[0][0]+p[1][0] : p[0].slice(0,2)).toUpperCase(); }
+function fmt(s){ s=Math.ceil(s); return Math.floor(s/60)+":"+String(s%60).padStart(2,"0"); }
+// square n -> center in board units (1 unit = 1 square, y grows downward)
+function sq(n){ const r=Math.floor((n-1)/COLS); let c=(n-1)%COLS; if(r%2) c=COLS-1-c; return { x:c+.5, y:ROWS-1-r+.5, c, r }; }
+const hex = (h) => [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)];
+const mix = (a,b,t) => a.map((v,i)=>Math.round(v+(b[i]-v)*t));
+
+/* ================= pixel sprites ================= */
+function outlineGrid(g,K){
+  const H=g.length, W=g[0].length, out=g.map(r=>r.slice());
+  for(let y=0;y<H;y++) for(let x=0;x<W;x++) if(!g[y][x]){
+    if((g[y-1]&&g[y-1][x])||(g[y+1]&&g[y+1][x])||g[y][x-1]||g[y][x+1]) out[y][x]=K; }
+  return out;
+}
+// Silva: a jacked guy in a Hawaii-flag tee, arms out to grab the slide.
+function makeSilva(){
+  const W=30, H=28, g=Array.from({length:H},()=>Array(W).fill(null));
+  const set=(x,y,c)=>{ if(x>=0&&y>=0&&x<W&&y<H) g[y][x]=c; };
+  const rect=(x0,y0,x1,y1,c)=>{ for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++) set(x,y,c); };
+  const mirror=(x0,y0,x1,y1,c)=>{ rect(x0,y0,x1,y1,c); rect(29-x1,y0,29-x0,y1,c); };
+  const SK="#F2B07E", SD="#C97B4B", HA="#2A170B", K="#121018", WT="#FFFFFF", R="#E8222C", B="#2445C8", NV="#162A86", SH="#26283A";
+  rect(11,1,18,8,SK); set(11,1,null); set(18,1,null); set(11,8,null); set(18,8,null);
+  rect(11,1,18,2,HA); set(12,0,HA); set(14,0,HA); set(16,0,HA); set(11,3,HA); set(18,3,HA);
+  rect(11,4,18,4,K); rect(11,5,13,5,K); rect(16,5,18,5,K);
+  set(12,6,K); set(17,6,K); rect(13,7,16,7,K); set(14,8,SD); set(15,8,SD);
+  rect(12,9,17,9,SK); rect(9,10,20,10,SK);
+  mirror(2,13,7,15,SK); mirror(1,14,1,14,SK); mirror(3,16,6,16,SK);
+  mirror(2,17,5,19,SK); mirror(1,20,5,21,SK);
+  mirror(3,15,6,15,SD); mirror(5,17,5,19,SD); set(2,20,SD); set(27,20,SD);
+  mirror(3,13,4,13,"#FFD3AE"); mirror(9,10,10,10,SD);
+  const stripes=[WT,R,B,WT,R,B,WT,R];
+  const rows=[[6,23],[5,24],[5,24],[7,22],[8,21],[9,20],[9,20],[10,19]];
+  rows.forEach(([a,b],i)=>rect(a,11+i,b,11+i,stripes[i]));
+  ["WNNRNNW","NWNRNWN","RRRRRRR","NWNRNWN","WNNRNNW"].forEach((row,i)=>[...row].forEach((ch,j)=>set(8+j,11+i,ch==="W"?WT:ch==="R"?R:NV)));
+  rect(10,19,19,21,SH); set(14,21,null); set(15,21,null);
+  rect(11,22,13,24,SK); rect(16,22,18,24,SK);
+  rect(10,25,13,25,WT); rect(16,25,19,25,WT);
+  return { w:W, h:H, px:outlineGrid(g,K) };
+}
+function makeTrophy(){
+  const W=16,H=16,g=Array.from({length:H},()=>Array(W).fill(null)); const set=(x,y,c)=>{ if(x>=0&&y>=0&&x<W&&y<H) g[y][x]=c; };
+  const rect=(x0,y0,x1,y1,c)=>{ for(let y=y0;y<=y1;y++) for(let x=x0;x<=x1;x++) set(x,y,c); };
+  const Y="#FFD21F", D="#E09A00", L="#FFF6B0", BR="#8A4B16";
+  rect(4,1,11,6,Y); rect(5,7,10,7,Y); rect(6,8,9,8,Y); rect(7,9,8,10,D); rect(5,11,10,11,Y); rect(4,12,11,13,BR);
+  set(2,2,Y); set(2,3,Y); set(2,4,Y); set(3,5,Y); set(13,2,Y); set(13,3,Y); set(13,4,Y); set(12,5,Y);
+  rect(5,2,5,5,L); rect(10,2,10,6,D); rect(9,7,10,7,D);
+  return { w:W, h:H, px:outlineGrid(g,"#121018") };
+}
+// "BG" badge that sits on each slide
+function makeBadge(){
+  const B=["XXX.","X..X","XXX.","X..X","XXX."], G=[".XXX","X...","X.XX","X..X",".XXX"];
+  const W=13,H=9,K="#121018",O=ORANGE,WT="#FFFFFF";
+  const g=Array.from({length:H},(_,y)=>Array.from({length:W},(_,x)=> (x===0||y===0||x===W-1||y===H-1)?K:O));
+  B.forEach((row,y)=>[...row].forEach((ch,x)=>{ if(ch==="X") g[y+2][x+2]=WT; }));
+  G.forEach((row,y)=>[...row].forEach((ch,x)=>{ if(ch==="X") g[y+2][x+7]=WT; }));
+  return { w:W, h:H, px:g };
+}
+const SILVA = makeSilva(), TROPHY = makeTrophy(), BADGE = makeBadge();
+function spriteURL(sp, scale){
+  const c=document.createElement("canvas"); c.width=sp.w*scale; c.height=sp.h*scale; const x=c.getContext("2d");
+  sp.px.forEach((row,y)=>row.forEach((col,X)=>{ if(col){ x.fillStyle=col; x.fillRect(X*scale,y*scale,scale,scale); } }));
+  return c.toDataURL("image/png");
+}
+const SILVA_URL = spriteURL(SILVA, 6);
+
+/* ================= QUESTIONS ================= */
+const QUESTIONS = [
+  // ---- Module 0.4 ----
+  {m:"0.4", q:"Anything that can change and can be measured is a…", a:"Variable", w:["Placebo","Histogram","Debriefing"]},
+  {m:"0.4", q:"When two variables change together, that's a…", a:"Correlation", w:["Placebo effect","Random assignment","Debriefing"]},
+  {m:"0.4", q:"A correlation coefficient (r) tells you…", a:"How strongly two variables are related", w:["The average score","Who got the placebo","The most common score"]},
+  {m:"0.4", q:"Which correlation coefficient is the STRONGEST?", a:"r = −0.90", w:["r = +0.20","r = 0.00","r = +0.50"]},
+  {m:"0.4", q:"A graph of dots where each dot shows two variables is a…", a:"Scatterplot", w:["Histogram","Normal curve","Meta-analysis"]},
+  {m:"0.4", q:"On a scatterplot, dots that slope UP from left to right show a…", a:"Positive correlation", w:["Negative correlation","No correlation","Skewed distribution"]},
+  {m:"0.4", q:"Thinking two things are related when they really aren't is…", a:"Illusory correlation", w:["Regression toward the mean","Double-blind procedure","Informed consent"]},
+  {m:"0.4", q:"You score way above your usual on one test, then back to normal on the next. That's…", a:"Regression toward the mean", w:["Illusory correlation","Placebo effect","Experimenter bias"]},
+  {m:"0.4", q:"Ice cream sales and sunburns rise together. What's the best conclusion?", a:"They're related, but that doesn't prove cause", w:["Ice cream causes sunburns","Sunburns cause ice cream sales","They have no relationship at all"]},
+  {m:"0.4", q:"Which research method can show cause and effect?", a:"Experiment", w:["Correlation","Scatterplot","Survey"]},
+  {m:"0.4", q:"In an experiment, the group that GETS the treatment is the…", a:"Experimental group", w:["Control group","Confounding group","Debriefing group"]},
+  {m:"0.4", q:"The group that does NOT get the treatment, used for comparison, is the…", a:"Control group", w:["Experimental group","Random group","Median group"]},
+  {m:"0.4", q:"Putting participants into groups by chance is called…", a:"Random assignment", w:["Informed consent","Double-blind procedure","Regression toward the mean"]},
+  {m:"0.4", q:"Why do researchers use random assignment?", a:"So the groups start out equal", w:["To make the study faster","To pick the smartest people","To tell people the results"]},
+  {m:"0.4", q:"Participants don't know if they got the real treatment, but the researchers do. This is a…", a:"Single-blind procedure", w:["Double-blind procedure","Debriefing","Control group"]},
+  {m:"0.4", q:"NEITHER the participants NOR the researchers know who got the real treatment. This is a…", a:"Double-blind procedure", w:["Single-blind procedure","Random assignment","Informed consent"]},
+  {m:"0.4", q:"Feeling better just because you BELIEVE you took real medicine is the…", a:"Placebo effect", w:["Experimenter bias","Illusory correlation","Effect size"]},
+  {m:"0.4", q:"A fake pill with no real medicine in it is called a…", a:"Placebo", w:["Variable","Control group","Median"]},
+  {m:"0.4", q:"The factor a researcher changes on purpose is the…", a:"Independent variable", w:["Dependent variable","Confounding variable","Control group"]},
+  {m:"0.4", q:"The outcome a researcher measures is the…", a:"Dependent variable", w:["Independent variable","Confounding variable","Placebo"]},
+  {m:"0.4", q:"Study: Does music help memory? The INDEPENDENT variable is…", a:"Listening to music or not", w:["Memory test scores","The participants' ages","The room temperature"]},
+  {m:"0.4", q:"Study: Does music help memory? The DEPENDENT variable is…", a:"Memory test scores", w:["Listening to music or not","The type of headphones","The time of day"]},
+  {m:"0.4", q:"Something OTHER than the independent variable that could affect the results is a…", a:"Confounding variable", w:["Dependent variable","Placebo","Mode"]},
+  {m:"0.4", q:"A researcher's expectations accidentally change the results. This is…", a:"Experimenter bias", w:["Placebo effect","Regression toward the mean","Debriefing"]},
+  {m:"0.4", q:"Which procedure best prevents experimenter bias?", a:"Double-blind procedure", w:["Single-blind procedure","Scatterplot","Histogram"]},
+  // ---- Module 0.5 ----
+  {m:"0.5", q:"Research that uses NUMBERS as data is…", a:"Quantitative research", w:["Qualitative research","Debriefing","Informed consent"]},
+  {m:"0.5", q:"Research that uses in-depth words, like interviews, is…", a:"Qualitative research", w:["Quantitative research","Meta-analysis","Random assignment"]},
+  {m:"0.5", q:"Rating your stress on a 1–10 scale is which kind of research?", a:"Quantitative", w:["Qualitative","Illusory","Double-blind"]},
+  {m:"0.5", q:"Asking people to describe their feelings in their own words is which kind of research?", a:"Qualitative", w:["Quantitative","Inferential","Statistical"]},
+  {m:"0.5", q:"Telling people about a study so they can choose whether to join is…", a:"Informed consent", w:["Debriefing","Random assignment","Double-blind procedure"]},
+  {m:"0.5", q:"Explaining a study's real purpose to participants AFTER it ends is…", a:"Debriefing", w:["Informed consent","Random assignment","Experimenter bias"]},
+  {m:"0.5", q:"When does debriefing happen?", a:"After the study", w:["Before the study","During random assignment","Never"]},
+  // ---- Module 0.6 ----
+  {m:"0.6", q:"Numbers that describe and summarize a group's data are…", a:"Descriptive statistics", w:["Inferential statistics","Meta-analysis","Effect size"]},
+  {m:"0.6", q:"A bar graph showing how often each score happens is a…", a:"Histogram", w:["Scatterplot","Normal curve","Correlation coefficient"]},
+  {m:"0.6", q:"Scores: 2, 3, 3, 8. What's the MODE?", a:"3", w:["2","4","8"]},
+  {m:"0.6", q:"Scores: 2, 4, 6. What's the MEAN?", a:"4", w:["2","6","12"]},
+  {m:"0.6", q:"Scores: 1, 3, 10. What's the MEDIAN?", a:"3", w:["1","4","10"]},
+  {m:"0.6", q:"Scores: 50, 70, 90. What's the RANGE?", a:"40", w:["20","70","90"]},
+  {m:"0.6", q:"The MOST frequent score is the…", a:"Mode", w:["Mean","Median","Range"]},
+  {m:"0.6", q:"The MIDDLE score is the…", a:"Median", w:["Mean","Mode","Range"]},
+  {m:"0.6", q:"The average of all the scores is the…", a:"Mean", w:["Median","Mode","Range"]},
+  {m:"0.6", q:"You scored higher than 90% of the class. Your ___ is 90.", a:"Percentile rank", w:["Standard deviation","Mean","Effect size"]},
+  {m:"0.6", q:"Scores that are lopsided, with a long tail on one side, form a…", a:"Skewed distribution", w:["Normal curve","Scatterplot","Control group"]},
+  {m:"0.6", q:"Which tells you how spread out scores are around the mean?", a:"Standard deviation", w:["Mode","Median","Percentile rank"]},
+  {m:"0.6", q:"A small standard deviation means the scores are…", a:"Close together", w:["Spread far apart","All wrong","Skewed"]},
+  {m:"0.6", q:"A symmetrical, bell-shaped distribution is a…", a:"Normal curve", w:["Skewed distribution","Histogram","Scatterplot"]},
+  {m:"0.6", q:"In a normal curve, where do MOST scores fall?", a:"Near the mean", w:["At the highest end","At the lowest end","Spread out evenly"]},
+  {m:"0.6", q:"One student scores 100 and everyone else scores about 50. Which measure of center gets pulled up the MOST?", a:"Mean", w:["Median","Mode","Percentile rank"]},
+  {m:"0.6", q:"Using a sample to draw conclusions about a whole population uses…", a:"Inferential statistics", w:["Descriptive statistics","Histograms","Debriefing"]},
+  {m:"0.6", q:"Combining the results of MANY studies into one conclusion is a…", a:"Meta-analysis", w:["Histogram","Double-blind procedure","Case study"]},
+  {m:"0.6", q:"A result that probably did NOT happen by chance has…", a:"Statistical significance", w:["A placebo effect","A skewed distribution","Regression toward the mean"]},
+  {m:"0.6", q:"Which tells you how STRONG an effect actually is?", a:"Effect size", w:["Mode","Range","Debriefing"]},
+];
+
+/* ================= sound (chiptune) ================= */
+const sfx = (() => {
+  let ctx=null, muted=false;
+  try{ muted = localStorage.getItem("silvas-muted")==="1"; }catch(e){}
+  function ac(){ if(muted) return null; if(!ctx){ try{ ctx=new (window.AudioContext||window.webkitAudioContext)(); }catch(e){ return null; } } if(ctx.state==="suspended") ctx.resume(); return ctx; }
+  function tone(freq,dur,o={}){ const c=ac(); if(!c) return; const t0=c.currentTime+(o.at||0); const osc=c.createOscillator(), g=c.createGain();
+    osc.type=o.type||"square"; osc.frequency.setValueAtTime(freq,t0); if(o.to) osc.frequency.exponentialRampToValueAtTime(o.to,t0+dur);
+    g.gain.setValueAtTime(.0001,t0); g.gain.exponentialRampToValueAtTime(o.vol||.08,t0+.01); g.gain.setValueAtTime(o.vol||.08,t0+dur*.7); g.gain.exponentialRampToValueAtTime(.0001,t0+dur);
+    osc.connect(g); g.connect(c.destination); osc.start(t0); osc.stop(t0+dur+.05); }
+  return {
+    unlock(){ ac(); },
+    tick(){ tone(988,.05,{vol:.04}); },
+    correct(){ [659,784,1047,1319].forEach((f,i)=>tone(f,.1,{at:i*.07,vol:.07})); },
+    wrong(){ tone(196,.18,{type:"sawtooth",vol:.07}); tone(147,.35,{type:"sawtooth",vol:.07,at:.16}); },
+    roll(){ for(let i=0;i<10;i++) tone(400+rnd(700),.035,{vol:.035,at:i*.065}); },
+    ladder(){ [523,659,784,1047,1319,1568].forEach((f,i)=>tone(f,.09,{at:i*.08,vol:.07})); },
+    slide(){ tone(1600,1.2,{type:"triangle",to:150,vol:.16}); },
+    win(){ [523,523,523,698,880,784,1047].forEach((f,i)=>tone(f,i===6?.6:.14,{at:[0,.15,.3,.45,.65,.85,1.05][i],vol:.08})); },
+    buzzer(){ tone(130,.7,{vol:.07}); },
+    toggle(){ muted=!muted; try{ localStorage.setItem("silvas-muted",muted?"1":"0"); }catch(e){} if(!muted) ac(); return muted; },
+    isMuted(){ return muted; }
+  };
+})();
+
+/* ================= pixel sky background ================= */
+function drawSky(){
+  const cv=$("#sky"); const W=220, H=Math.max(80,Math.round(W*innerHeight/Math.max(1,innerWidth)));
+  cv.width=W; cv.height=H; const x=cv.getContext("2d");
+  const bands=["#3AA8FF","#4DB6FF","#5EC2FF","#74CCFF","#8AD6FF","#A2E0FF"];
+  bands.forEach((c,i)=>{ x.fillStyle=c; x.fillRect(0,Math.floor(H*i/bands.length),W,Math.ceil(H/bands.length)+1); });
+  const cloud=(px,py,s)=>{ x.fillStyle="#FFFFFF"; x.fillRect(px+2*s,py,6*s,2*s); x.fillRect(px,py+2*s,12*s,3*s); x.fillRect(px+3*s,py-2*s,4*s,2*s);
+    x.fillStyle="#D7EEFF"; x.fillRect(px,py+4*s,12*s,1*s); };
+  cloud(Math.round(W*.04),Math.round(H*.16),2); cloud(Math.round(W*.42),Math.round(H*.08),1); cloud(Math.round(W*.7),Math.round(H*.22),2); cloud(Math.round(W*.86),Math.round(H*.5),1); cloud(Math.round(W*.2),Math.round(H*.55),1);
+  const hill=(hx,r,col,edge)=>{ for(let y=H-r;y<H;y++) for(let X=hx-r*2;X<hx+r*2;X++){ const d=Math.hypot((X-hx)/2,y-H); if(d<r){ x.fillStyle = d>r-1.5?edge:col; x.fillRect(X,y,1,1);} } };
+  hill(Math.round(W*.15),Math.round(H*.16),"#36C455","#16803A"); hill(Math.round(W*.62),Math.round(H*.12),"#2FB04C","#16803A"); hill(Math.round(W*.95),Math.round(H*.18),"#36C455","#16803A");
+  x.fillStyle="#16803A"; x.fillRect(0,H-2,W,2);
+}
+
+/* ================= pixel board ================= */
+const CELL=40, BW=COLS*CELL, BH=ROWS*CELL;
+function slideGeom(h){ const H=sq(h), T=sq(SILVAS[h]); const dx=T.x-H.x, dy=T.y-H.y, L=Math.hypot(dx,dy); const px=-dy/L, py=dx/L; const b=SLIDE_BOW[h]||0;
+  return { H, T, C:{ x:(H.x+T.x)/2+px*b, y:(H.y+T.y)/2+py*b } }; }
+function bez(G,p){ const u=1-p; return { x:u*u*G.H.x+2*u*p*G.C.x+p*p*G.T.x, y:u*u*G.H.y+2*u*p*G.C.y+p*p*G.T.y }; }
+function drawBoard(){
+  document.documentElement.style.setProperty("--ar", String(COLS/ROWS)); document.documentElement.style.setProperty("--cols", String(COLS));
+  const cv=$("#boardCanvas"); cv.width=BW; cv.height=BH; const ctx=cv.getContext("2d");
+  const img=ctx.createImageData(BW,BH), d=img.data;
+  const put=(X,Y,rgb,a)=>{ X|=0; Y|=0; if(X<0||Y<0||X>=BW||Y>=BH) return; const i=(Y*BW+X)*4;
+    if(a===undefined||a>=1){ d[i]=rgb[0]; d[i+1]=rgb[1]; d[i+2]=rgb[2]; } else { d[i]=d[i]+(rgb[0]-d[i])*a; d[i+1]=d[i+1]+(rgb[1]-d[i+1])*a; d[i+2]=d[i+2]+(rgb[2]-d[i+2])*a; } d[i+3]=255; };
+  const mask=(pts,r,ox=0,oy=0)=>{ const m=new Set(), R=Math.ceil(r); for(const p of pts){ const cx=Math.round(p.x+ox), cy=Math.round(p.y+oy);
+      for(let y=-R;y<=R;y++) for(let x=-R;x<=R;x++) if(x*x+y*y<=r*r){ const X=cx+x, Y=cy+y; if(X>=0&&Y>=0&&X<BW&&Y<BH) m.add(Y*BW+X); } } return m; };
+  const paint=(m,rgb,a)=>{ for(const k of m) put(k%BW, Math.floor(k/BW), rgb, a); };
+  const BLACK=hex("#121018"), WHITE=[255,255,255];
+  // squares: clean two-tone checker, orange start, gold finish
+  const tones=[hex("#F4F7FF"),hex("#C9D8FF")];
+  for(let n=1;n<=N;n++){
+    const {c,r}=sq(n); const x0=c*CELL, y0=(ROWS-1-r)*CELL;
+    const base = n===1 ? hex("#FFB46B") : n===N ? hex("#FFD21F") : tones[(c+r)%2];
+    for(let y=0;y<CELL;y++) for(let x=0;x<CELL;x++){
+      let col=base;
+      if(x<3||y<3) col=mix(base,WHITE,.5);
+      if(x>=CELL-3||y>=CELL-3) col=mix(base,BLACK,.2);
+      put(x0+x,y0+y,col);
+    }
+  }
+  // ladders
+  const lineP=(a,b)=>{ const L=Math.hypot(b.x-a.x,b.y-a.y), n=Math.max(2,Math.ceil(L*2)); return Array.from({length:n+1},(_,i)=>({x:a.x+(b.x-a.x)*i/n, y:a.y+(b.y-a.y)*i/n})); };
+  for(const a in LADDERS){
+    const A=sq(+a), B=sq(LADDERS[a]); const ax=A.x*CELL, ay=A.y*CELL, bx=B.x*CELL, by=B.y*CELL;
+    const dx=bx-ax, dy=by-ay, L=Math.hypot(dx,dy), ux=dx/L, uy=dy/L, px=-uy, py=ux, w=7;
+    const s={x:ax-ux*6,y:ay-uy*6}, e={x:bx+ux*6,y:by+uy*6}, len=L+12;
+    let rails=[], rungs=[];
+    [1,-1].forEach(k=>{ rails=rails.concat(lineP({x:s.x+px*w*k,y:s.y+py*w*k},{x:e.x+px*w*k,y:e.y+py*w*k})); });
+    for(let t=5;t<len-3;t+=7){ const cx=s.x+ux*t, cy=s.y+uy*t; rungs=rungs.concat(lineP({x:cx+px*w,y:cy+py*w},{x:cx-px*w,y:cy-py*w})); }
+    const all=rails.concat(rungs);
+    paint(mask(all,2.2,2,2),BLACK,.28);
+    paint(mask(all,2.2),BLACK);
+    paint(mask(rungs,1.1),hex("#B8732E"));
+    paint(mask(rails,1.2),hex("#D98B3A"));
+  }
+  // Bishop Gorman slides: black outline, orange rails, royal-blue bed
+  const slidePts={};
+  for(const h in SILVAS){
+    const G=slideGeom(+h); const pts=[]; for(let i=0;i<=400;i++){ const p=bez(G,i/400); pts.push({x:p.x*CELL,y:p.y*CELL}); }
+    slidePts[h]=pts;
+    paint(mask(pts,7.1,2,3),BLACK,.3);
+    paint(mask(pts,7.1),BLACK);
+    paint(mask(pts,6.1),hex(ORANGE));
+    paint(mask(pts,4.3),hex("#163FB8"));
+    paint(mask(pts,3.2),hex(ROYAL));
+    paint(mask(pts,1.0,-1,0),hex("#6E93FF"));
+  }
+  ctx.putImageData(img,0,0);
+  const blit=(sp,X,Y)=>sp.px.forEach((row,y)=>row.forEach((col,x)=>{ if(col){ ctx.fillStyle=col; ctx.fillRect(X+x,Y+y,1,1); } }));
+  // BG badge in the middle of each slide, Silva on top of each slide
+  for(const h in SILVAS){ const p=slidePts[h][255]; blit(BADGE,Math.round(p.x-6),Math.round(p.y-4)); }
+  for(const h in SILVAS){ const H=sq(+h); const X=Math.round(H.x*CELL-15), Y=Math.max(0,Math.round(H.y*CELL-21)); blit(SILVA,X,Y); }
+  const F=sq(N); blit(TROPHY,Math.round(F.x*CELL-8),Math.round(F.y*CELL-12));
+  // number labels
+  const s=$("#boardLabels"); s.setAttribute("viewBox",`0 0 ${BW} ${BH}`); s.textContent="";
+  const NS="http://www.w3.org/2000/svg";
+  for(let n=1;n<=N;n++){ const {c,r}=sq(n); const x0=c*CELL, y0=(ROWS-1-r)*CELL;
+    const t=document.createElementNS(NS,"text"); t.setAttribute("x",x0+3.5); t.setAttribute("y",y0+10.5); t.setAttribute("class","num"); t.textContent=n; s.appendChild(t);
+    if(n===1||n===N){ const l=document.createElementNS(NS,"text"); l.setAttribute("x",x0+20); l.setAttribute("y",y0+36); l.setAttribute("text-anchor","middle"); l.setAttribute("class","sqlabel"); l.textContent=n===1?"START":"FINISH"; s.appendChild(l); }
+  }
+}
+
+/* ================= state ================= */
+function freshState(){ return { phase:"setup", teams:[], order:[], turn:0, deck:[], qi:null, opts:[], picked:null,
+  timeLimit:240, timeLeft:240, running:false, timeUp:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
+let S = freshState();
+let busy = false;
+
+/* ================= tokens ================= */
+const pctX = (x) => (x/COLS*100)+"%", pctY = (y) => (y/ROWS*100)+"%";
+function tokenEl(t){
+  let e=document.getElementById("tok-"+t.id);
+  if(!e){ e=el("div","token"); e.id="tok-"+t.id; e.setAttribute("aria-hidden","true"); e.appendChild(el("span","o")); e.appendChild(el("span","i")); $("#tokens").appendChild(e); }
+  e.style.setProperty("--c",t.color); e.querySelector(".i").textContent=initials(t.name); return e;
+}
+function placeTokens(){
+  const groups={};
+  S.teams.forEach(t=>{ (groups[t.pos]=groups[t.pos]||[]).push(t); });
+  const curId = (S.phase!=="setup" && S.order.length && S.phase!=="over") ? S.order[S.turn] : null;
+  document.querySelectorAll(".token").forEach(e=>{ if(!S.teams.some(t=>"tok-"+t.id===e.id)) e.remove(); });
+  for(const pos in groups){
+    const list=groups[pos], n=list.length, P=sq(+pos);
+    const cols = n===1?1 : n<=4?2 : 3; const step = n===1?0 : n<=4?.24 : .21; const frac = n===1?.55 : n<=4?.43 : .33;
+    const rows = Math.ceil(n/cols);
+    list.forEach((t,i)=>{
+      const e=tokenEl(t);
+      const cx=(i%cols)-(cols-1)/2, cy=Math.floor(i/cols)-(rows-1)/2;
+      e.style.left=pctX(P.x+cx*step); e.style.top=pctY(P.y+cy*step+.1);
+      e.style.setProperty("--tw",(frac*100/COLS)+"%");
+      e.classList.toggle("now", t.id===curId);
+    });
+  }
+}
+
+/* ================= render ================= */
+const team = (id) => S.teams.find(t=>t.id===id);
+const cur = () => team(S.order[S.turn]);
+
+function render(){
+  const playing = S.phase!=="setup";
+  $("#setupView").hidden = playing;
+  $("#playView").hidden = !playing;
+  $("#endBtn").hidden = !playing || S.phase==="over" || S.phase==="order";
+  renderChips(); renderTimer();
+  if(!playing) renderSetup(); else renderPlay();
+  $("#orderOverlay").hidden = S.phase!=="order";
+  if(S.phase==="order") renderOrder();
+  $("#winOverlay").hidden = S.phase!=="over";
+  if(S.phase==="over") renderWin();
+  placeTokens();
+}
+function renderChips(){
+  const box=$("#orderChips"); box.textContent="";
+  if(S.phase==="setup") return;
+  S.order.forEach((id,i)=>{ const t=team(id); const li=el("li","chip"+(i===S.turn && S.phase!=="over"?" now":"")); li.style.setProperty("--c",t.color);
+    li.appendChild(el("span","sw")); li.appendChild(el("span","",t.name)); li.appendChild(el("span","sq",t.pos)); box.appendChild(li); });
+}
+function renderSetup(){
+  const list=$("#teamList"); list.textContent="";
+  if(!S.teams.length){ const li=el("li","empty","No teams yet. Press “+ Add team” to make the first one."); li.style.gridColumn="1 / -1"; list.appendChild(li); }
+  S.teams.forEach(t=>{
+    const li=el("li","team-row"); li.style.setProperty("--c",t.color);
+    li.appendChild(el("span","sw",initials(t.name))); li.appendChild(el("span","name",t.name));
+    const x=el("button","x","X"); x.type="button"; x.setAttribute("aria-label","Remove "+t.name); x.onclick=()=>{ S.teams=S.teams.filter(z=>z.id!==t.id); render(); };
+    li.appendChild(x); list.appendChild(li);
+  });
+  $("#addBtn").disabled = S.teams.length>=COLORS.length;
+  document.querySelectorAll("#timeSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.t===S.timeLimit)));
+  const ok=S.teams.length>=2; $("#startBtn").disabled=!ok;
+  $("#startHint").textContent = ok ? `${S.teams.length} TEAMS READY` : `ADD ${2-S.teams.length} MORE TEAM${S.teams.length===1?"":"S"}`;
+}
+const FACES={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
+function setDie(i,v){ const d=$("#die"+i); if(!d.children.length) for(let k=0;k<9;k++) d.appendChild(el("span")); [...d.children].forEach((s,k)=>s.classList.toggle("on",FACES[v].includes(k))); }
+function renderPlay(){
+  const t=cur(); if(!t) return;
+  $("#turnBar").style.setProperty("--c",t.color);
+  $("#turnName").textContent=t.name.toUpperCase()+"'S TURN";
+  $("#turnWhere").textContent = t.pos===1 ? "ON START" : "SQUARE "+t.pos;
+  $("#timeupNote").hidden = !S.timeUp || S.phase==="over";
+  const q=QUESTIONS[S.qi];
+  if(q){
+    $("#qTag").textContent=`MODULE ${q.m} · QUESTION ${S.qCount}`;
+    $("#qText").textContent=q.q;
+    const box=$("#answers"); box.textContent="";
+    S.opts.forEach((o,i)=>{
+      const b=el("button","ans"); b.type="button";
+      b.appendChild(el("span","letter","ABCD"[i])); b.appendChild(el("span","txt",o));
+      const answered=S.picked!==null; b.disabled=answered;
+      if(answered){ if(o===q.a) b.classList.add("right"); else if(i===S.picked) b.classList.add("wrong"); else b.classList.add("dim"); }
+      b.onclick=()=>answer(i); box.appendChild(b);
+    });
+  }
+  const v=$("#verdict"); v.textContent="";
+  if(S.picked===null){ v.hidden=true; }
+  else { v.hidden=false; const ok=S.opts[S.picked]===q.a; v.className="verdict "+(ok?"good":"bad");
+    v.appendChild(el("span","stamp",ok?"CORRECT!":"INCORRECT!"));
+    v.appendChild(el("span","more", ok ? (S.rolled ? "Nice!" : "Roll the dice.") : "No roll this turn. Answer: "+q.a)); }
+  setDie(0,S.dice[0]); setDie(1,S.dice[1]);
+  $("#sum").textContent = S.rolled ? "="+(S.dice[0]+S.dice[1]) : "";
+  $("#dice").style.opacity = (S.phase==="correct"||S.rolled||S.phase==="rolling") ? 1 : .35;
+  const btn=$("#actionBtn"); btn.className="btn big"; btn.disabled=false; btn.hidden=false;
+  if(S.phase==="question"){ btn.textContent="Pick their answer"; btn.disabled=true; }
+  else if(S.phase==="correct"){ btn.textContent="Roll the dice!"; btn.classList.add("orange"); }
+  else if(S.phase==="rolling"||S.phase==="moving"){ btn.textContent="Moving…"; btn.disabled=true; }
+  else if(S.phase==="wrong"||S.phase==="moved"){ btn.textContent = S.timeUp ? "See the winner ▶" : "Next team ▶"; btn.classList.add("blue"); }
+  else btn.hidden=true;
+}
+function renderOrder(){
+  const ol=$("#orderList"); ol.textContent="";
+  S.order.forEach((id,i)=>{ const t=team(id); const li=el("li"); li.style.setProperty("--c",t.color); li.style.animationDelay=(i*.2)+"s";
+    li.appendChild(el("span","n",String(i+1))); li.appendChild(el("span","sw")); li.appendChild(el("span","nm",t.name)); ol.appendChild(li); });
+  $("#beginBtn").textContent = S.timeLimit ? `▶ Begin · ${fmt(S.timeLimit)} on the clock` : "▶ Begin";
+}
+function renderWin(){
+  const winners=S.winners.map(team);
+  $("#winReason").textContent = S.winBy.toUpperCase();
+  $("#winTitle").textContent = winners.length>1 ? "IT'S A TIE!" : winners[0].name.toUpperCase()+" WINS!";
+  const ol=$("#standings"); ol.textContent="";
+  [...S.teams].sort((a,b)=>b.pos-a.pos).forEach((t,i)=>{ const li=el("li",S.winners.includes(t.id)?"win":""); li.style.setProperty("--c",t.color);
+    li.appendChild(el("span","n",String(i+1))); li.appendChild(el("span","sw")); li.appendChild(el("span","nm",t.name));
+    li.appendChild(el("span","sq", t.pos>=N ? "FINISH" : "SQ "+t.pos)); ol.appendChild(li); });
+}
+function renderTimer(){
+  const box=$("#timer"); const show = S.phase!=="setup" && S.timeLimit>0;
+  box.hidden=!show; if(!show) return;
+  $("#timerText").textContent = S.timeUp ? "0:00" : fmt(S.timeLeft);
+  box.classList.toggle("up", S.timeUp && S.phase!=="over");
+  box.classList.toggle("low", !S.timeUp && S.timeLeft<=30);
+  const p=$("#pauseBtn"); p.hidden = S.timeUp || S.phase==="over" || S.phase==="order";
+  p.innerHTML = S.running
+    ? '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg>'
+    : '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2h2v12H3zM5 3h2v10H5zM7 4h2v8H7zM9 5h2v6H9zM11 6h2v4h-2z"/></svg>';
+  p.setAttribute("aria-label", S.running ? "Pause timer" : "Resume timer");
+}
+function renderMute(){
+  const m=sfx.isMuted(); const b=$("#muteBtn");
+  b.innerHTML = (m
+    ? '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 5h3l4-3v12l-4-3H1zM10 5h2v2h-2zM14 5h2v2h-2zM12 7h2v2h-2zM10 9h2v2h-2zM14 9h2v2h-2z"/></svg>'
+    : '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M1 5h3l4-3v12l-4-3H1zM10 5h2v6h-2zM13 3h2v10h-2z"/></svg>')
+    + `<span class="lbl">${m?"SOUND OFF":"SOUND ON"}</span>`;
+  b.setAttribute("aria-pressed", String(!m)); b.setAttribute("aria-label", m ? "Sound off" : "Sound on");
+}
+
+/* ================= game flow ================= */
+function addTeam(name){
+  if(S.teams.length>=COLORS.length) return;
+  const used=new Set(S.teams.map(t=>t.color)); const color=COLORS.find(c=>!used.has(c));
+  S.teams.push({ id:S.nextId++, name, color, pos:1 }); render();
+}
+function startGame(){
+  if(S.teams.length<2) return; sfx.unlock();
+  S.order=shuffle(S.teams.map(t=>t.id)); S.teams.forEach(t=>t.pos=1);
+  S.turn=0; S.deck=shuffle(QUESTIONS.map((_,i)=>i)); S.qCount=0;
+  S.timeLeft=S.timeLimit; S.timeUp=false; S.running=false; S.winners=[]; S.qi=null; S.picked=null; S.rolled=false;
+  S.phase="order"; render(); $("#beginBtn").focus();
+}
+function begin(){ if(S.phase!=="order") return; S.running=S.timeLimit>0; lastTick=performance.now(); newTurn(); }
+function newTurn(){
+  if(!S.deck.length) S.deck=shuffle(QUESTIONS.map((_,i)=>i));
+  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.qCount++;
+  S.phase="question"; render();
+}
+function answer(i){
+  if(S.phase!=="question") return;
+  S.picked=i; const ok=S.opts[i]===QUESTIONS[S.qi].a;
+  S.phase = ok ? "correct" : "wrong"; ok ? sfx.correct() : sfx.wrong(); render();
+  $("#actionBtn").focus({preventScroll:true});
+}
+async function roll(){
+  if(S.phase!=="correct" || busy) return; busy=true;
+  S.phase="rolling"; render(); sfx.roll();
+  const dice=$("#dice"); dice.classList.add("rolling");
+  const until=performance.now()+(reduced()?100:750);
+  while(performance.now()<until){ setDie(0,1+rnd(6)); setDie(1,1+rnd(6)); await sleep(70); }
+  dice.classList.remove("rolling");
+  S.dice=[1+rnd(6),1+rnd(6)]; S.rolled=true; S.phase="moving"; render();
+  const t=cur(); const steps=S.dice[0]+S.dice[1];
+  await sleep(250);
+  for(let k=0;k<steps && t.pos<N;k++){
+    t.pos++; placeTokens(); sfx.tick(); const e=tokenEl(t); e.classList.remove("hop"); void e.offsetWidth; e.classList.add("hop");
+    await sleep(200);
+  }
+  renderChips(); $("#turnWhere").textContent="SQUARE "+t.pos;
+  if(t.pos>=N){ t.pos=N; busy=false; return win([t.id], `Reached square ${N} first`); }
+  if(LADDERS[t.pos]){ const from=t.pos, to=LADDERS[from];
+    await popEvent("ladder","LADDER!",`${t.name} climbs from ${from} up to ${to}`); sfx.ladder();
+    const A=sq(from), B=sq(to);
+    await glide(t,(p)=>({x:A.x+(B.x-A.x)*p, y:A.y+(B.y-A.y)*p}), 950, (p)=>p<.5?2*p*p:1-Math.pow(-2*p+2,2)/2);
+    t.pos=to;
+  } else if(SILVAS[t.pos]){ const from=t.pos, to=SILVAS[from];
+    await popEvent("silva","SILVA'D!",`${t.name} rides the BG slide from ${from} down to ${to}`); sfx.slide();
+    const G=slideGeom(from);
+    await glide(t,(p)=>bez(G,p), 1150, (p)=>p*p*(1.6-.6*p));
+    t.pos=to;
+  }
+  S.phase="moved"; busy=false; render(); $("#actionBtn").focus({preventScroll:true});
+}
+function glide(t, path, ms, ease){
+  return new Promise((res)=>{
+    const e=tokenEl(t); e.classList.add("glide","now"); e.style.setProperty("--tw",(55/COLS)+"%");
+    const t0=performance.now(); const dur=reduced()?1:ms;
+    function f(now){ const p=Math.min(1,(now-t0)/dur); const pt=path(ease(p)); e.style.left=pctX(pt.x); e.style.top=pctY(pt.y+.1);
+      if(p<1) requestAnimationFrame(f); else { e.classList.remove("glide"); res(); } }
+    requestAnimationFrame(f);
+  });
+}
+async function popEvent(kind,title,sub){
+  const box=$("#eventPop"); box.className="event "+kind;
+  $("#eventTitle").textContent=title; $("#eventSub").textContent=sub;
+  const img=$("#eventImg");
+  if(kind==="silva"){ img.src=SILVA_URL; img.hidden=false; img.alt="Silva holding the slide"; } else { img.hidden=true; img.removeAttribute("src"); }
+  box.hidden=false; await sleep(kind==="silva"?1800:1200); box.hidden=true;
+}
+function next(){
+  if(!(S.phase==="wrong"||S.phase==="moved") || busy) return;
+  if(S.timeUp) return endByPosition("Time's up! Furthest team wins");
+  S.turn=(S.turn+1)%S.order.length; newTurn();
+}
+function endByPosition(reason){ const max=Math.max(...S.teams.map(t=>t.pos)); win(S.teams.filter(t=>t.pos===max).map(t=>t.id), reason); }
+function win(ids, reason){ S.winners=ids; S.winBy=reason; S.running=false; S.phase="over"; sfx.win(); render(); confetti(); }
+
+/* ================= timer ================= */
+let lastTick=performance.now();
+setInterval(()=>{
+  const now=performance.now(); const dt=(now-lastTick)/1000; lastTick=now;
+  if(!S.running || S.phase==="setup" || S.phase==="order" || S.phase==="over") return;
+  S.timeLeft=Math.max(0,S.timeLeft-dt);
+  if(S.timeLeft<=0 && !S.timeUp){ S.timeUp=true; S.running=false; sfx.buzzer(); render(); return; }
+  renderTimer();
+},200);
+
+/* ================= pixel confetti ================= */
+function confetti(){
+  if(reduced()) return;
+  const c=$("#confetti"), x=c.getContext("2d"); const W=c.width=Math.ceil(innerWidth/4), H=c.height=Math.ceil(innerHeight/4);
+  const cols=[ROYAL,ORANGE,"#FFFFFF","#FFD21F"].concat(S.teams.map(t=>t.color));
+  const ps=Array.from({length:120},()=>({x:Math.random()*W,y:-10-Math.random()*H*.7,vx:-.5+Math.random(),vy:.5+Math.random()*1.2,s:1+rnd(3),c:cols[rnd(cols.length)]}));
+  const t0=performance.now();
+  (function f(now){ x.clearRect(0,0,W,H); ps.forEach(p=>{ p.x+=p.vx; p.y+=p.vy; p.vy+=.012; x.fillStyle=p.c; x.fillRect(Math.round(p.x),Math.round(p.y),p.s,p.s); });
+    if(now-t0<5000 && S.phase==="over") requestAnimationFrame(f); else x.clearRect(0,0,W,H); })(t0);
+}
+
+/* ================= wiring ================= */
+function wire(){
+  $("#logoImg").src=spriteURL(SILVA,4);
+  const form=$("#addForm"), input=$("#teamName");
+  $("#addBtn").onclick=()=>{ form.hidden=false; $("#addBtn").hidden=true; input.value=""; input.placeholder="Team "+(S.teams.length+1); input.focus(); };
+  const closeForm=()=>{ form.hidden=true; $("#addBtn").hidden=false; $("#addBtn").focus(); };
+  $("#cancelAdd").onclick=closeForm;
+  input.addEventListener("keydown",e=>{ if(e.key==="Escape"){ e.preventDefault(); closeForm(); } });
+  form.addEventListener("submit",e=>{ e.preventDefault(); const name=(input.value.trim()||input.placeholder).slice(0,24); addTeam(name); closeForm(); });
+  document.querySelectorAll("#timeSeg button").forEach(b=>b.onclick=()=>{ S.timeLimit=+b.dataset.t; render(); });
+  $("#startBtn").onclick=startGame;
+  $("#beginBtn").onclick=begin;
+  $("#actionBtn").onclick=()=>{ if(S.phase==="correct") roll(); else if(S.phase==="wrong"||S.phase==="moved") next(); };
+  $("#pauseBtn").onclick=()=>{ if(S.timeUp||S.phase==="over") return; S.running=!S.running; lastTick=performance.now(); renderTimer(); };
+  $("#muteBtn").onclick=()=>{ sfx.toggle(); renderMute(); };
+  $("#fsBtn").onclick=()=>{ try{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(()=>{}); }catch(e){} };
+  let armTimer=null;
+  $("#endBtn").onclick=(ev)=>{ const b=ev.currentTarget;
+    if(b.classList.contains("armed")){ clearTimeout(armTimer); b.classList.remove("armed"); b.textContent="End game"; busy=false; endByPosition("Game ended early. Furthest team wins"); return; }
+    b.classList.add("armed"); b.textContent="Click again to end"; armTimer=setTimeout(()=>{ b.classList.remove("armed"); b.textContent="End game"; },3000); };
+  $("#rematchBtn").onclick=startGame;
+  $("#changeBtn").onclick=()=>{ S.phase="setup"; S.teams.forEach(t=>t.pos=1); S.running=false; render(); };
+  document.addEventListener("keydown",(e)=>{
+    if(e.target.closest && e.target.closest("input,textarea,select")) return;
+    if(e.metaKey||e.ctrlKey||e.altKey) return;
+    const k=e.key.toLowerCase();
+    if(S.phase==="question" && k.length===1){ let i="abcd".indexOf(k); if(i<0) i="1234".indexOf(k); if(i>=0){ e.preventDefault(); answer(i); return; } }
+    if(k===" "||k==="enter"){
+      if(S.phase==="correct"){ e.preventDefault(); roll(); }
+      else if(S.phase==="wrong"||S.phase==="moved"){ e.preventDefault(); next(); }
+      else if(S.phase==="order"){ e.preventDefault(); begin(); }
+    }
+  });
+  let rz=null; window.addEventListener("resize",()=>{ placeTokens(); clearTimeout(rz); rz=setTimeout(drawSky,150); });
+}
+
+/* ================= boot (keeps a running game through live updates) ================= */
+function boot(data){
+  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); }
+  drawSky(); drawBoard(); wire(); renderMute(); render();
+  if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>placeTokens());
+}
+try{ window.claude?.hot?.snapshot?.(()=>({ S: JSON.parse(JSON.stringify(S)) })); }catch(e){}
+if(window.claude?.hot?.ready) window.claude.hot.ready(boot); else boot(window.claude?.hot?.data ?? {});
+})();
+</script>
+</body>
+</html>

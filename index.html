@@ -187,6 +187,9 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
 .die span.on{background:var(--ink)}
 .dice-stage{position:absolute;inset:0;z-index:7;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1.6cqw;background:var(--scrim)}
 .big-dice{display:flex;gap:5cqw}
+.die{position:relative}
+.die.blank::after{content:"?";position:absolute;inset:0;display:grid;place-items:center;font-family:var(--display);font-size:22px;color:var(--muted)}
+.die.big.blank::after{font-size:7cqw;color:var(--ink)}
 .die.big{width:15cqw;height:15cqw;border-width:.8cqw;padding:1.8cqw;gap:.7cqw;box-shadow:inset -.8cqw -.8cqw 0 rgba(0,0,0,.15),1cqw 1cqw 0 var(--ink)}
 .dice-stage.rolling .die.big{animation:bigTumble .5s steps(8) infinite}
 .dice-stage.rolling .die.big:nth-child(2){animation-duration:.62s;animation-direction:reverse}
@@ -617,7 +620,7 @@ const music = (() => {
     setTimeout(()=>{ try{ m.disconnect(); }catch(e){} },400);
     updateBtn();
   }
-  function updateBtn(){ const b=document.getElementById("musicBtn"); if(b) b.textContent = master ? "■ Stop music" : "▶ Play music"; }
+  function updateBtn(){ const b=document.getElementById("musicBtn"); if(b) b.textContent = master ? "Stop music" : "▶ Play music"; }
   function play(){
     stop(); const c=sfx.ctx(); if(!c) return;
     master=c.createGain(); master.gain.value=.55; master.connect(c.destination); const out=master;
@@ -777,7 +780,7 @@ function drawBoard(){
 
 /* ================= state ================= */
 function freshState(){ return { phase:"setup", teams:[], order:[], turn:0, deck:[], qi:null, opts:[], picked:null,
-  clock:210, perTeam:0, pendingOut:false, paused:false, qLeft:15, timedOut:false, outNow:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
+  clock:210, perTeam:0, pendingOut:false, paused:false, qLeft:15, timedOut:false, outNow:false, dice:[0,0], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
 let S = freshState();
 let busy = false;
 
@@ -848,7 +851,7 @@ function renderSetup(){
   $("#startHint").textContent = ok ? `${S.teams.length} TEAMS READY` : `ADD ${2-S.teams.length} MORE TEAM${S.teams.length===1?"":"S"}`;
 }
 const FACES={1:[4],2:[0,8],3:[0,4,8],4:[0,2,6,8],5:[0,2,4,6,8],6:[0,2,3,5,6,8]};
-function setFace(d,v){ if(!d.children.length) for(let k=0;k<9;k++) d.appendChild(el("span")); [...d.children].forEach((s,k)=>s.classList.toggle("on",FACES[v].includes(k))); }
+function setFace(d,v){ if(!d.children.length) for(let k=0;k<9;k++) d.appendChild(el("span")); d.classList.toggle("blank",!v); [...d.children].forEach((s,k)=>s.classList.toggle("on",!!v && FACES[v].includes(k))); }
 function setDie(i,v){ setFace($("#die"+i),v); setFace($("#bd"+i),v); }
 function renderPlay(){
   const t=cur(); if(!t) return;
@@ -872,9 +875,9 @@ function renderPlay(){
   if(S.picked===null){ v.hidden=true; }
   else { v.hidden=false; const ok=S.opts[S.picked]===q.a; v.className="verdict "+(ok && !S.outNow?"good":"bad");
     v.appendChild(el("span","stamp",S.outNow?"OUT OF TIME!":ok?"CORRECT!":S.timedOut?"TIME'S UP!":"INCORRECT!"));
-    v.appendChild(el("span","more", S.outNow ? `${t.name} is out of the game.`+(ok?"":` Answer: ${q.a}`) : ok ? (S.rolled ? "Nice!" : "Roll the dice.") : "No roll this turn. Answer: "+q.a)); }
+    v.appendChild(el("span","more", S.outNow ? `${t.name} is out of the game.`+(ok?"":` Answer: ${q.a}`) : ok ? (S.rolled ? `Rolled ${S.dice[0]} + ${S.dice[1]} = ${S.dice[0]+S.dice[1]}!` : "Roll the dice.") : "No roll this turn. Answer: "+q.a)); }
   renderQTimer();
-  setDie(0,S.dice[0]); setDie(1,S.dice[1]);
+  setDie(0,S.rolled?S.dice[0]:0); setDie(1,S.rolled?S.dice[1]:0);   // "?" until this team rolls
   $("#sum").textContent = S.rolled ? "="+(S.dice[0]+S.dice[1]) : "";
   $("#dice").style.opacity = (S.phase==="correct"||S.rolled||S.phase==="rolling") ? 1 : .35;
   const btn=$("#actionBtn"); btn.className="btn big"; btn.disabled=false; btn.hidden=false;
@@ -951,7 +954,7 @@ function startGame(){
 function begin(){ if(S.phase!=="order") return; lastTick=performance.now(); newTurn(); }
 function newTurn(){
   if(!S.deck.length) S.deck=shuffle(QUESTIONS.map((_,i)=>i));
-  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.qCount++; S.qLeft=Q_TIME; S.timedOut=false; S.outNow=false; S.pendingOut=false;
+  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.dice=[0,0]; S.qCount++; S.qLeft=Q_TIME; S.timedOut=false; S.outNow=false; S.pendingOut=false;
   S.phase="question"; render();
 }
 function answer(i){

@@ -142,10 +142,10 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
 .add-form label{width:100%;font-family:var(--display);font-size:11px}
 .add-form input{flex:1 1 160px;min-width:0;font-family:var(--body);font-size:22px;font-weight:700;padding:10px 12px;border:4px solid var(--ink);border-radius:0;background:var(--white);color:var(--ink)}
 .seg{display:inline-flex;border:4px solid var(--ink);background:var(--white);flex-wrap:wrap}
-.seg button{border:0;background:transparent;padding:10px 12px;font-family:var(--display);font-size:10px}
+.seg button{border:0;background:transparent;padding:10px 9px;font-family:var(--display);font-size:9px}
 .seg button+button{border-left:3px solid var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--royal);color:var(--white);text-shadow:2px 2px 0 var(--ink)}
-.opt-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.opt-row{display:flex;flex-direction:column;align-items:flex-start;gap:8px}
 .rules{margin:0;padding:12px 14px 12px 36px;background:var(--panel-2);border:3px solid var(--ink);line-height:1.4;font-size:clamp(16px,1.1vw,19px)}
 .rules b{font-weight:700;color:var(--royal)}
 .start-row{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
@@ -326,11 +326,12 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
         </form>
         <div><button class="btn orange" type="button" id="addBtn">+ Add team</button></div>
         <div class="opt-row">
-          <span class="eyebrow">CLOCK PER TEAM</span>
-          <div class="seg" id="timeSeg" role="group" aria-label="Clock per team">
-            <button type="button" data-t="30">30 SEC</button>
-            <button type="button" data-t="45">45 SEC</button>
-            <button type="button" data-t="60">60 SEC</button>
+          <span class="eyebrow">GAME LENGTH</span>
+          <div class="seg" id="timeSeg" role="group" aria-label="Total game length">
+            <button type="button" data-t="150">2.5 MIN</button>
+            <button type="button" data-t="180">3 MIN</button>
+            <button type="button" data-t="210">3.5 MIN</button>
+            <button type="button" data-t="240">4 MIN</button>
             <button type="button" data-t="0">OFF</button>
           </div>
           <span class="time-hint" id="timeHint"></span>
@@ -339,7 +340,7 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
           <li>Read the question out loud. The team has <b>15 seconds</b> to pick <b>A, B, C or D</b>, and you click their answer. Out of time = incorrect.</li>
           <li><b>Correct</b> → roll two dice and move. <b>Incorrect</b> → no roll, next team.</li>
           <li>Land on a <b>ladder</b> → climb up. Land on a <b>Silva</b> → ride his BG slide down.</li>
-          <li>Every team has its <b>own clock</b>. It only runs while that team's question is up, so answer fast! A team that runs out of time is <b>out</b>.</li>
+          <li>The game length is split evenly into each team's <b>own clock</b>. It only runs during that team's turn, so answer fast! A team that runs out of time is <b>out</b>.</li>
           <li>First team to <b>28</b> wins. If every team runs out of time, the team furthest ahead wins.</li>
         </ol>
         <div class="start-row">
@@ -722,7 +723,7 @@ function drawBoard(){
 
 /* ================= state ================= */
 function freshState(){ return { phase:"setup", teams:[], order:[], turn:0, deck:[], qi:null, opts:[], picked:null,
-  perTeam:30, paused:false, qLeft:15, timedOut:false, outNow:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
+  total:180, perTeam:0, pendingOut:false, paused:false, qLeft:15, timedOut:false, outNow:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
 let S = freshState();
 let busy = false;
 
@@ -787,8 +788,9 @@ function renderSetup(){
     li.appendChild(x); list.appendChild(li);
   });
   $("#addBtn").disabled = S.teams.length>=COLORS.length;
-  document.querySelectorAll("#timeSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.t===S.perTeam)));
-  $("#timeHint").textContent = S.perTeam ? `EACH TEAM GETS ${fmt(S.perTeam)} OF ANSWER TIME` : "NO TEAM CLOCKS";
+  document.querySelectorAll("#timeSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.t===S.total)));
+  const n=Math.max(2,S.teams.length);
+  $("#timeHint").textContent = S.total ? `${fmt(S.total)} TOTAL ÷ ${n} TEAMS = ${fmt(Math.round(S.total/n))} EACH` : "NO TEAM CLOCKS";
   const ok=S.teams.length>=2; $("#startBtn").disabled=!ok;
   $("#startHint").textContent = ok ? `${S.teams.length} TEAMS READY` : `ADD ${2-S.teams.length} MORE TEAM${S.teams.length===1?"":"S"}`;
 }
@@ -814,9 +816,9 @@ function renderPlay(){
   }
   const v=$("#verdict"); v.textContent="";
   if(S.picked===null){ v.hidden=true; }
-  else { v.hidden=false; const ok=S.opts[S.picked]===q.a; v.className="verdict "+(ok?"good":"bad");
-    v.appendChild(el("span","stamp",ok?"CORRECT!":S.outNow?"OUT OF TIME!":S.timedOut?"TIME'S UP!":"INCORRECT!"));
-    v.appendChild(el("span","more", ok ? (S.rolled ? "Nice!" : "Roll the dice.") : (S.outNow ? t.name+" is out of the game. Answer: " : "No roll this turn. Answer: ")+q.a)); }
+  else { v.hidden=false; const ok=S.opts[S.picked]===q.a; v.className="verdict "+(ok && !S.outNow?"good":"bad");
+    v.appendChild(el("span","stamp",S.outNow?"OUT OF TIME!":ok?"CORRECT!":S.timedOut?"TIME'S UP!":"INCORRECT!"));
+    v.appendChild(el("span","more", S.outNow ? `${t.name} is out of the game.`+(ok?"":` Answer: ${q.a}`) : ok ? (S.rolled ? "Nice!" : "Roll the dice.") : "No roll this turn. Answer: "+q.a)); }
   renderQTimer();
   setDie(0,S.dice[0]); setDie(1,S.dice[1]);
   $("#sum").textContent = S.rolled ? "="+(S.dice[0]+S.dice[1]) : "";
@@ -881,6 +883,7 @@ function addTeam(name){
 }
 function startGame(){
   if(S.teams.length<2) return; sfx.unlock(); music.stop();
+  S.perTeam = S.total ? Math.round(S.total/S.teams.length) : 0; S.pendingOut=false;
   S.order=shuffle(S.teams.map(t=>t.id)); S.teams.forEach(t=>{ t.pos=1; t.time=S.perTeam; t.out=false; });
   S.turn=0; S.deck=shuffle(QUESTIONS.map((_,i)=>i)); S.qCount=0;
   S.paused=false; S.winners=[]; S.qi=null; S.picked=null; S.rolled=false;
@@ -889,7 +892,7 @@ function startGame(){
 function begin(){ if(S.phase!=="order") return; lastTick=performance.now(); newTurn(); }
 function newTurn(){
   if(!S.deck.length) S.deck=shuffle(QUESTIONS.map((_,i)=>i));
-  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.qCount++; S.qLeft=Q_TIME; S.timedOut=false; S.outNow=false;
+  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.qCount++; S.qLeft=Q_TIME; S.timedOut=false; S.outNow=false; S.pendingOut=false;
   S.phase="question"; render();
 }
 function answer(i){
@@ -936,6 +939,7 @@ async function roll(){
     await glide(t,(p)=>bez(G,p), 1150, (p)=>p*p*(1.6-.6*p));
     t.pos=to;
   }
+  if(S.pendingOut){ t.out=true; t.time=0; S.outNow=true; S.pendingOut=false; sfx.buzzer(); }
   S.phase="moved"; busy=false; render(); $("#actionBtn").focus({preventScroll:true});
 }
 function glide(t, path, ms, ease){
@@ -970,9 +974,13 @@ setInterval(()=>{
   const now=performance.now(); const dt=(now-lastTick)/1000; lastTick=now;
   if(S.paused || S.phase==="setup" || S.phase==="order" || S.phase==="over") return;
   const ct=cur();
-  if(S.perTeam && ct && !ct.out && S.phase==="question"){
+  const live=["question","correct","rolling","moving"].includes(S.phase);
+  if(S.perTeam && ct && !ct.out && !S.pendingOut && live){
     ct.time=Math.max(0,ct.time-dt);
-    if(ct.time<=0){ teamOut(ct); return; }
+    if(ct.time<=0){
+      if(S.phase==="question"||S.phase==="correct"){ teamOut(ct); return; }
+      S.pendingOut=true; // mid-move: let the move finish, then they're out
+    }
     renderTimer(); renderChips();
   }
   if(S.phase==="question"){
@@ -1007,7 +1015,7 @@ function wire(){
   $("#cancelAdd").onclick=closeForm;
   input.addEventListener("keydown",e=>{ if(e.key==="Escape"){ e.preventDefault(); closeForm(); } });
   form.addEventListener("submit",e=>{ e.preventDefault(); const name=(input.value.trim()||input.placeholder).slice(0,24); addTeam(name); closeForm(); });
-  document.querySelectorAll("#timeSeg button").forEach(b=>b.onclick=()=>{ S.perTeam=+b.dataset.t; render(); });
+  document.querySelectorAll("#timeSeg button").forEach(b=>b.onclick=()=>{ S.total=+b.dataset.t; render(); });
   $("#startBtn").onclick=startGame;
   $("#beginBtn").onclick=begin;
   $("#actionBtn").onclick=()=>{ if(S.phase==="correct") roll(); else if(S.phase==="wrong"||S.phase==="moved") next(); };
@@ -1037,7 +1045,7 @@ function wire(){
 
 /* ================= boot (keeps a running game through live updates) ================= */
 function boot(data){
-  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); if(![30,45,60,0].includes(S.perTeam)) S.perTeam=30; S.teams.forEach(t=>{ if(typeof t.time!=="number") t.time=S.perTeam; }); }
+  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); if(![150,180,210,240,0].includes(S.total)) S.total=180; S.teams.forEach(t=>{ if(typeof t.time!=="number") t.time=S.perTeam; }); }
   drawSky(); drawBoard(); wire(); renderMute(); render();
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>placeTokens());
 }

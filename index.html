@@ -7,7 +7,7 @@
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Pixelify+Sans:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Press+Start+2P&family=Pixelify+Sans:wght@500;600;700&display=swap">
 <style>
 /* Layout: one-screen 8-bit game table over a pixel sky. Wide 7x4 pixel board on the left, proctor panel on the right; stacks on narrow screens.
    Deliberately single-theme: retro arcade in Bishop Gorman royal blue + orange, every color set explicitly. */
@@ -187,6 +187,23 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
 .actions .btn{margin-left:auto}
 .keys{margin:0;font-size:15px;color:var(--ink);background:rgba(255,255,255,.8);padding:5px 10px;align-self:flex-start;border:2px solid var(--ink)}
 .keys kbd{font-family:var(--display);font-size:9px;border:2px solid var(--ink);padding:2px 5px;background:var(--white)}
+.qhead{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.qtimer{display:flex;align-items:center;gap:8px;padding:5px 9px;background:var(--lcd);border:3px solid var(--ink);font-family:var(--display);font-size:18px;line-height:1;color:var(--orange)}
+.qtimer .lbl{font-size:8px;color:var(--white)}
+.qtimer.low{color:var(--bad);animation:blink .5s steps(1) infinite}
+.qtimer.paused{animation:none;opacity:.6}
+.qbar{height:12px;border:3px solid var(--ink);background:var(--panel-2)}
+.qbar i{display:block;height:100%;width:100%;background:var(--royal);transition:width .2s linear}
+.qbar.low i{background:var(--bad)}
+.timer.paused .t{animation:blink 1s steps(1) infinite}
+.time-hint{font-family:var(--display);font-size:9px;line-height:1.5;color:var(--muted)}
+.corner-plea{position:fixed;left:max(20px,env(safe-area-inset-left,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:1;pointer-events:none;margin:0;
+  font-family:"Bungee",var(--display);font-weight:400;line-height:1.05;text-transform:uppercase;display:flex;flex-direction:column;gap:2px;transform-origin:left bottom;animation:floaty 3.2s ease-in-out infinite}
+.corner-plea span{display:block;font-size:clamp(18px,2.4vw,40px);color:var(--orange);-webkit-text-stroke:2px var(--ink);paint-order:stroke fill;text-shadow:2px 2px 0 var(--royal),4px 4px 0 var(--royal),6px 6px 0 var(--ink)}
+.corner-plea .l1{color:var(--white)}
+.corner-plea b{display:inline-block;font-weight:400;font-size:1.25em;color:var(--bad);animation:pulseA 1.4s steps(2) infinite}
+@keyframes floaty{0%,100%{transform:rotate(-4deg) translateY(0)}50%{transform:rotate(-2deg) translateY(-6px)}}
+@keyframes pulseA{50%{transform:scale(1.3)}}
 .timeup-note{padding:12px 14px;border:5px solid var(--ink);background:var(--bad);color:var(--white);font-family:var(--display);font-size:11px;line-height:1.6;text-shadow:2px 2px 0 var(--ink);animation:blink 1s steps(1) infinite}
 
 /* overlays */
@@ -227,7 +244,12 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
 @keyframes blink{50%{opacity:.4}}
 @keyframes slidein{from{transform:translateX(-30px);opacity:0}}
 
+@media (max-height:780px) and (min-width:1001px){
+  .corner-plea{flex-direction:row;gap:.35em}
+  .corner-plea span{font-size:clamp(16px,1.6vw,24px)}
+}
 @media (max-width:1000px){
+  .corner-plea{position:static;align-self:center;align-items:center;margin-top:10px}
   .stage{grid-template-columns:minmax(0,1fr)}
   .board-col{--size:100%;width:100%;max-width:900px;justify-self:center}
 }
@@ -301,19 +323,20 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
         </form>
         <div><button class="btn orange" type="button" id="addBtn">+ Add team</button></div>
         <div class="opt-row">
-          <span class="eyebrow">TIME LIMIT</span>
-          <div class="seg" id="timeSeg" role="group" aria-label="Time limit">
-            <button type="button" data-t="180">3 MIN</button>
-            <button type="button" data-t="240">4 MIN</button>
-            <button type="button" data-t="300">5 MIN</button>
+          <span class="eyebrow">TIME PER TEAM</span>
+          <div class="seg" id="timeSeg" role="group" aria-label="Time per team">
+            <button type="button" data-t="45">45 SEC</button>
+            <button type="button" data-t="60">1 MIN</button>
+            <button type="button" data-t="75">75 SEC</button>
             <button type="button" data-t="0">OFF</button>
           </div>
+          <span class="time-hint" id="timeHint"></span>
         </div>
         <ol class="rules">
-          <li>Read the question out loud. The team picks <b>A, B, C or D</b>, and you click their answer.</li>
+          <li>Read the question out loud. The team has <b>15 seconds</b> to pick <b>A, B, C or D</b>, and you click their answer. Out of time = incorrect.</li>
           <li><b>Correct</b> → roll two dice and move. <b>Incorrect</b> → no roll, next team.</li>
           <li>Land on a <b>ladder</b> → climb up. Land on a <b>Silva</b> → ride his BG slide down.</li>
-          <li>First team to <b>28</b> wins. If time runs out, the team furthest ahead wins.</li>
+          <li>First team to <b>28</b> wins. The game clock is the time per team × the number of teams. If it runs out, the team furthest ahead wins.</li>
         </ol>
         <div class="start-row">
           <button class="btn blue big" type="button" id="startBtn">▶ Start game</button>
@@ -329,8 +352,12 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
         </div>
         <div class="timeup-note" id="timeupNote" hidden>TIME'S UP! FINISH THIS TURN, THEN PRESS NEXT.</div>
         <div class="pcard qcard">
-          <p class="eyebrow" id="qTag"></p>
+          <div class="qhead">
+            <p class="eyebrow" id="qTag"></p>
+            <div class="qtimer" id="qTimer" role="timer" aria-label="Seconds left to answer"><span class="lbl">ANSWER IN</span><span id="qSecs">15</span></div>
+          </div>
           <p class="qtext" id="qText"></p>
+          <div class="qbar" id="qBar" aria-hidden="true"><i id="qFill"></i></div>
         </div>
         <div class="answers" id="answers"></div>
         <div class="verdict" id="verdict" hidden></div>
@@ -345,6 +372,7 @@ h2{margin:0;font-family:var(--display);font-weight:400;font-size:clamp(15px,1.4v
       </div>
     </section>
   </main>
+  <p class="corner-plea" aria-label="Mr Silva give me an A please"><span class="l1">Mr Silva give me</span><span class="l2">an <b>A</b> please</span></p>
 </div>
 
 <!-- turn order reveal -->
@@ -388,6 +416,7 @@ const SILVAS  = { 13: 2, 21: 8, 25: 11, 26: 17 };
 // how much each slide curves (in squares); positive bends left, negative bends right
 const SLIDE_BOW = { 13: 0.4, 21: 0.35, 25: -0.35, 26: 0.2 };
 
+const Q_TIME = 15; // seconds to answer each question
 const COLORS = ["#E8323C","#1F4FD8","#18A848","#9B45F0","#FF7A1A","#10B5B5","#F0559E","#7A8099"];
 const ROYAL = "#1F4FD8", ORANGE = "#FF7A1A";
 
@@ -542,6 +571,7 @@ const sfx = (() => {
     win(){ [523,523,523,698,880,784,1047].forEach((f,i)=>tone(f,i===6?.6:.14,{at:[0,.15,.3,.45,.65,.85,1.05][i],vol:.08})); },
     buzzer(){ tone(130,.7,{vol:.07}); },
     stamp(){ tone(110,.14,{vol:.14}); tone(70,.2,{vol:.12,at:.02}); },
+    tick2(){ tone(1320,.07,{vol:.05}); },
     ctx(){ return ac(); },
     toggle(){ muted=!muted; try{ localStorage.setItem("silvas-muted",muted?"1":"0"); }catch(e){} if(!muted) ac(); return muted; },
     isMuted(){ return muted; }
@@ -689,7 +719,7 @@ function drawBoard(){
 
 /* ================= state ================= */
 function freshState(){ return { phase:"setup", teams:[], order:[], turn:0, deck:[], qi:null, opts:[], picked:null,
-  timeLimit:240, timeLeft:240, running:false, timeUp:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
+  perTeam:60, timeLimit:0, timeLeft:0, running:false, paused:false, timeUp:false, qLeft:15, timedOut:false, dice:[5,2], rolled:false, winners:[], winBy:"", nextId:1, qCount:0 }; }
 let S = freshState();
 let busy = false;
 
@@ -752,7 +782,9 @@ function renderSetup(){
     li.appendChild(x); list.appendChild(li);
   });
   $("#addBtn").disabled = S.teams.length>=COLORS.length;
-  document.querySelectorAll("#timeSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.t===S.timeLimit)));
+  document.querySelectorAll("#timeSeg button").forEach(b=>b.setAttribute("aria-pressed", String(+b.dataset.t===S.perTeam)));
+  const n=Math.max(2,S.teams.length);
+  $("#timeHint").textContent = S.perTeam ? `${n} TEAMS × ${fmt(S.perTeam)} = ${fmt(S.perTeam*n)} GAME` : "NO GAME CLOCK";
   const ok=S.teams.length>=2; $("#startBtn").disabled=!ok;
   $("#startHint").textContent = ok ? `${S.teams.length} TEAMS READY` : `ADD ${2-S.teams.length} MORE TEAM${S.teams.length===1?"":"S"}`;
 }
@@ -780,8 +812,9 @@ function renderPlay(){
   const v=$("#verdict"); v.textContent="";
   if(S.picked===null){ v.hidden=true; }
   else { v.hidden=false; const ok=S.opts[S.picked]===q.a; v.className="verdict "+(ok?"good":"bad");
-    v.appendChild(el("span","stamp",ok?"CORRECT!":"INCORRECT!"));
+    v.appendChild(el("span","stamp",ok?"CORRECT!":S.timedOut?"TIME'S UP!":"INCORRECT!"));
     v.appendChild(el("span","more", ok ? (S.rolled ? "Nice!" : "Roll the dice.") : "No roll this turn. Answer: "+q.a)); }
+  renderQTimer();
   setDie(0,S.dice[0]); setDie(1,S.dice[1]);
   $("#sum").textContent = S.rolled ? "="+(S.dice[0]+S.dice[1]) : "";
   $("#dice").style.opacity = (S.phase==="correct"||S.rolled||S.phase==="rolling") ? 1 : .35;
@@ -808,16 +841,25 @@ function renderWin(){
     li.appendChild(el("span","sq", t.pos>=N ? "FINISH" : "SQ "+t.pos)); ol.appendChild(li); });
 }
 function renderTimer(){
-  const box=$("#timer"); const show = S.phase!=="setup" && S.timeLimit>0;
+  const box=$("#timer"); const show = S.phase!=="setup";
   box.hidden=!show; if(!show) return;
-  $("#timerText").textContent = S.timeUp ? "0:00" : fmt(S.timeLeft);
+  $("#timerText").textContent = !S.timeLimit ? "--:--" : S.timeUp ? "0:00" : fmt(S.timeLeft);
   box.classList.toggle("up", S.timeUp && S.phase!=="over");
-  box.classList.toggle("low", !S.timeUp && S.timeLeft<=30);
-  const p=$("#pauseBtn"); p.hidden = S.timeUp || S.phase==="over" || S.phase==="order";
-  p.innerHTML = S.running
+  box.classList.toggle("low", !!S.timeLimit && !S.timeUp && S.timeLeft<=30);
+  box.classList.toggle("paused", S.paused && S.phase!=="over");
+  const p=$("#pauseBtn"); p.hidden = S.phase==="over" || S.phase==="order";
+  p.innerHTML = !S.paused
     ? '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2h4v12H3zM9 2h4v12H9z"/></svg>'
     : '<svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M3 2h2v12H3zM5 3h2v10H5zM7 4h2v8H7zM9 5h2v6H9zM11 6h2v4h-2z"/></svg>';
-  p.setAttribute("aria-label", S.running ? "Pause timer" : "Resume timer");
+  p.setAttribute("aria-label", S.paused ? "Resume timers" : "Pause timers");
+}
+function renderQTimer(){
+  const show = S.phase==="question";
+  $("#qTimer").hidden=!show; $("#qBar").hidden=!show; if(!show) return;
+  $("#qSecs").textContent=String(Math.ceil(S.qLeft));
+  const low=S.qLeft<=5; $("#qTimer").classList.toggle("low",low); $("#qBar").classList.toggle("low",low);
+  $("#qTimer").classList.toggle("paused",S.paused);
+  $("#qFill").style.width=(S.qLeft/Q_TIME*100)+"%";
 }
 function renderMute(){
   const m=sfx.isMuted(); const b=$("#muteBtn");
@@ -838,19 +880,24 @@ function startGame(){
   if(S.teams.length<2) return; sfx.unlock(); music.stop();
   S.order=shuffle(S.teams.map(t=>t.id)); S.teams.forEach(t=>t.pos=1);
   S.turn=0; S.deck=shuffle(QUESTIONS.map((_,i)=>i)); S.qCount=0;
-  S.timeLeft=S.timeLimit; S.timeUp=false; S.running=false; S.winners=[]; S.qi=null; S.picked=null; S.rolled=false;
+  S.timeLimit=S.perTeam*S.teams.length; S.timeLeft=S.timeLimit; S.timeUp=false; S.running=false; S.paused=false; S.winners=[]; S.qi=null; S.picked=null; S.rolled=false;
   S.phase="order"; render(); $("#beginBtn").focus();
 }
 function begin(){ if(S.phase!=="order") return; S.running=S.timeLimit>0; lastTick=performance.now(); newTurn(); }
 function newTurn(){
   if(!S.deck.length) S.deck=shuffle(QUESTIONS.map((_,i)=>i));
-  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.qCount++;
+  S.qi=S.deck.pop(); const q=QUESTIONS[S.qi]; S.opts=shuffle([q.a,...q.w]); S.picked=null; S.rolled=false; S.qCount++; S.qLeft=Q_TIME; S.timedOut=false;
   S.phase="question"; render();
 }
 function answer(i){
   if(S.phase!=="question") return;
   S.picked=i; const ok=S.opts[i]===QUESTIONS[S.qi].a;
   S.phase = ok ? "correct" : "wrong"; ok ? sfx.correct() : sfx.wrong(); render();
+  $("#actionBtn").focus({preventScroll:true});
+}
+function timeOut(){
+  if(S.phase!=="question") return;
+  S.picked=-1; S.timedOut=true; S.phase="wrong"; sfx.buzzer(); render();
   $("#actionBtn").focus({preventScroll:true});
 }
 async function roll(){
@@ -911,10 +958,17 @@ function win(ids, reason){ S.winners=ids; S.winBy=reason; S.running=false; S.pha
 let lastTick=performance.now();
 setInterval(()=>{
   const now=performance.now(); const dt=(now-lastTick)/1000; lastTick=now;
-  if(!S.running || S.phase==="setup" || S.phase==="order" || S.phase==="over") return;
-  S.timeLeft=Math.max(0,S.timeLeft-dt);
-  if(S.timeLeft<=0 && !S.timeUp){ S.timeUp=true; S.running=false; sfx.buzzer(); render(); return; }
-  renderTimer();
+  if(S.paused || S.phase==="setup" || S.phase==="order" || S.phase==="over") return;
+  if(S.running){
+    S.timeLeft=Math.max(0,S.timeLeft-dt);
+    if(S.timeLeft<=0 && !S.timeUp){ S.timeUp=true; S.running=false; sfx.buzzer(); render(); }
+    else renderTimer();
+  }
+  if(S.phase==="question"){
+    const before=Math.ceil(S.qLeft); S.qLeft=Math.max(0,S.qLeft-dt); const after=Math.ceil(S.qLeft);
+    if(after!==before && after>0 && after<=5) sfx.tick2();
+    if(S.qLeft<=0) timeOut(); else renderQTimer();
+  }
 },200);
 
 /* ================= pixel confetti ================= */
@@ -942,11 +996,11 @@ function wire(){
   $("#cancelAdd").onclick=closeForm;
   input.addEventListener("keydown",e=>{ if(e.key==="Escape"){ e.preventDefault(); closeForm(); } });
   form.addEventListener("submit",e=>{ e.preventDefault(); const name=(input.value.trim()||input.placeholder).slice(0,24); addTeam(name); closeForm(); });
-  document.querySelectorAll("#timeSeg button").forEach(b=>b.onclick=()=>{ S.timeLimit=+b.dataset.t; render(); });
+  document.querySelectorAll("#timeSeg button").forEach(b=>b.onclick=()=>{ S.perTeam=+b.dataset.t; render(); });
   $("#startBtn").onclick=startGame;
   $("#beginBtn").onclick=begin;
   $("#actionBtn").onclick=()=>{ if(S.phase==="correct") roll(); else if(S.phase==="wrong"||S.phase==="moved") next(); };
-  $("#pauseBtn").onclick=()=>{ if(S.timeUp||S.phase==="over") return; S.running=!S.running; lastTick=performance.now(); renderTimer(); };
+  $("#pauseBtn").onclick=()=>{ if(S.phase==="over") return; S.paused=!S.paused; lastTick=performance.now(); renderTimer(); renderQTimer(); };
   $("#muteBtn").onclick=()=>{ sfx.toggle(); renderMute(); };
   $("#fsBtn").onclick=()=>{ try{ if(document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(()=>{}); }catch(e){} };
   let armTimer=null;
@@ -972,7 +1026,7 @@ function wire(){
 
 /* ================= boot (keeps a running game through live updates) ================= */
 function boot(data){
-  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); }
+  if(data && data.S){ S=Object.assign(freshState(), data.S); if(S.phase==="rolling"||S.phase==="moving") S.phase="moved"; S.teams.forEach(t=>{ if(t.pos>N) t.pos=N; }); if(![45,60,75,0].includes(S.perTeam)) S.perTeam=60; }
   drawSky(); drawBoard(); wire(); renderMute(); render();
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>placeTokens());
 }
